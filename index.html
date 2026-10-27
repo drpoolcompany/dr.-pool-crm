@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Pool Staff</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--ink:#06303b;--sub:#4d7480;--bg:#f2f9fa;--card:#fff;--line:#c7e2e6;--hd:#0a5a6b;--err:#c4383e}
+@media(prefers-color-scheme:dark){:root{--ink:#e1f3f5;--sub:#8db4bd;--bg:#071d24;--card:#0c2831;--line:#1c4551;--hd:#0d5062;--err:#ff7a7f}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:linear-gradient(90deg,#ffffff14 1px,transparent 1px) 0 0/26px 26px,linear-gradient(#ffffff14 1px,transparent 1px) 0 0/26px 26px,var(--hd);color:var(--ink);font:16px/1.45 system-ui,-apple-system,sans-serif}
+.card{width:min(380px,100%);background:var(--card);border-radius:16px;padding:28px 24px;box-shadow:0 20px 50px #0005;display:grid;gap:14px}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+p{margin:0;color:var(--sub);font-size:14px}
+label{display:grid;gap:4px;font-size:14px;color:var(--sub);font-weight:600}
+input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+button{font:600 16px system-ui,sans-serif;border:0;border-radius:10px;padding:12px;background:var(--hd);color:#fff;cursor:pointer}
+button:disabled{opacity:.6}
+.err{color:var(--err);font-weight:600;font-size:14px;min-height:1em}
+.apps{display:grid;gap:10px}
+.apps a{display:block;padding:14px 16px;border:1px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none;font-weight:600}
+.apps a span{display:block;font-weight:400;font-size:13px;color:var(--sub)}
+.apps a:hover{border-color:var(--hd)}
+.link{background:none;color:var(--sub);padding:4px;font-weight:500;font-size:14px}
+:focus-visible{outline:2px solid #4fd0da;outline-offset:2px}
+</style>
+</head>
+<body>
+<main class="card" id="app">
+  <h1>Dr. Pool</h1>
+  <p>Loading…</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="shared/drpool.js"></script>
+<script>
+const app = document.getElementById('app');
+const next = new URLSearchParams(location.search).get('next');
+function loginForm(msg) {
+  app.innerHTML = `<h1>Dr. Pool</h1><p>Sign in with the username and password the office gave you.</p>
+  <form id="f" style="display:grid;gap:14px">
+    <label>Username<input id="u" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="e.g. david"></label>
+    <label>Password<input id="p" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="e"></div>
+    <button id="b">Sign in</button>
+  </form>`;
+  if (msg) document.getElementById('e').textContent = msg;
+  document.getElementById('f').onsubmit = async ev => {
+    ev.preventDefault();
+    const b = document.getElementById('b'), e = document.getElementById('e');
+    b.disabled = true; e.textContent = '';
+    try {
+      const me = await DrPool.signIn(document.getElementById('u').value, document.getElementById('p').value);
+      if (!me || me.notStaff) { await DrPool.sb.auth.signOut(); throw new Error('This login is not set up as Dr. Pool staff yet. Ask Daniel.'); }
+      if (next && /^\/[\w./-]*$/.test(next)) location.href = next; else home(me);
+    } catch (err) { e.textContent = err.message; b.disabled = false; }
+  };
+}
+function home(me) {
+  app.innerHTML = `<h1>Hi, <span id="nm"></span></h1><p id="role"></p>
+  <div class="apps">
+    <a href="crm/">CRM<span>Your jobs and tasks${me.office ? ', or the whole office' : ''}</span></a>
+    ${me.office ? '<a href="board/">Chalkboard<span>The shared inbox to-do board</span></a>' : ''}
+  </div>
+  <button class="link" id="out" type="button">Sign out</button>`;
+  document.getElementById('nm').textContent = me.name;
+  document.getElementById('role').textContent = me.office ? 'You have Office access.' : 'You see the work assigned to you.';
+  document.getElementById('out').onclick = DrPool.signOut;
+}
+DrPool.loadMe().then(me => {
+  if (me && !me.notStaff) { if (next && /^\/[\w./-]*$/.test(next)) location.href = next; else home(me); }
+  else loginForm(me && me.notStaff ? 'This login is not set up as Dr. Pool staff yet. Ask Daniel.' : '');
+}).catch(() => loginForm('Could not reach the server. Check your connection and try again.'));
+</script>
+</body>
+</html>
