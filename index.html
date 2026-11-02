@@ -67,6 +67,10 @@ function home(me) {
   document.getElementById('role').textContent = me.office ? 'You have Office access.' : 'You see the work assigned to you.';
   document.getElementById('out').onclick = DrPool.signOut;
 }
+if (!window.DrPool) {
+  app.innerHTML = '<h1>Dr. Pool</h1><p class="err">The app files did not load (shared/drpool.js is missing or blocked). Make sure the shared, crm and board folders were uploaded, then reload.</p>';
+  throw new Error('DrPool missing');
+}
 DrPool.loadMe().then(me => {
   if (me && !me.notStaff) { if (next && /^\/[\w./-]*$/.test(next)) location.href = next; else home(me); }
   else loginForm(me && me.notStaff ? 'This login is not set up as Dr. Pool staff yet. Ask Daniel.' : '');

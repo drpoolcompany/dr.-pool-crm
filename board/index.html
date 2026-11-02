@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Pool Chalkboard</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Patrick+Hand&family=Patrick+Hand+SC&display=swap">
+<style>
+/* A framed classroom chalkboard: one column of chalk-ruled bucket sections, checkable lines, done items drop to a tray.
+   Light = whiteboard in a wood frame (same as the Claude artifact). Dark = a real slate chalkboard. */
+:root {
+  --wood: #d9c3a0; --wood-hi: #ead9bb;
+  --board: #fbfaf5; --board-deep: #ffffff; --rule: rgba(47,99,168,.10);
+  --chalk: #23302b; --chalk-dim: #5d6b64; --dash: rgba(35,48,43,.2); --hover: rgba(35,48,43,.07);
+  --c-action: #a86a00; --c-pay: #1d7a46; --c-ok: #137a74; --c-ask: #b4591a; --c-lead: #2f63a8;
+  --c-cancel: #b83a3a; --c-warn: #a8386f; --c-admin: #6a4fb0; --c-misc: #6b6450;
+  --pop: #fffef9; --shadow: rgba(60,40,10,.22);
+  --font-display: "Caveat Brush", "Segoe Print", "Comic Sans MS", cursive;
+  --font-body: "Patrick Hand", "Segoe Print", "Comic Sans MS", cursive;
+  --font-label: "Patrick Hand SC", "Patrick Hand", "Segoe Print", cursive;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wood: #6b4f33; --wood-hi: #8a6a47;
+    --board: #24312c; --board-deep: #1a2420; --rule: rgba(236,235,228,.07);
+    --chalk: #ecebe4; --chalk-dim: #a9b3ad; --dash: rgba(236,235,228,.16); --hover: rgba(236,235,228,.08);
+    --c-action: #f0b54a; --c-pay: #6fd39a; --c-ok: #5fd0c6; --c-ask: #f39a5e; --c-lead: #8db6f0;
+    --c-cancel: #f08484; --c-warn: #f08cbf; --c-admin: #b9a4f2; --c-misc: #cfc6a8;
+    --pop: #2c3a35; --shadow: rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--wood); color: var(--chalk); font-family: var(--font-body); font-size: 19px; line-height: 1.3; }
+.wrap { padding: 20px max(16px, env(safe-area-inset-right, 0px)) 28px max(16px, env(safe-area-inset-left, 0px)); }
+.frame { max-width: 980px; margin: 0 auto; padding: 14px; border-radius: 6px;
+  background: linear-gradient(135deg, var(--wood-hi), var(--wood) 40%, var(--wood-hi));
+  box-shadow: 0 6px 20px var(--shadow), inset 0 0 0 2px rgba(90,60,20,.18); }
+.board { position: relative; min-width: 0; padding: 26px clamp(14px, 4vw, 38px) 30px; background: var(--board);
+  background-image: repeating-linear-gradient(transparent 0 33px, var(--rule) 33px 34px);
+  box-shadow: inset 0 0 0 1px rgba(90,60,20,.15); border-radius: 3px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+h1 { margin: 0; font: 400 clamp(38px, 7vw, 60px)/1 var(--font-display); letter-spacing: .5px; text-wrap: balance; transform: rotate(-1deg); }
+.sweep { font-family: var(--font-label); color: var(--chalk-dim); font-size: 17px; letter-spacing: .05em; text-align: right; }
+.src { display: block; font-size: 14px; letter-spacing: .06em; margin-top: 2px; }
+.src.live { color: var(--c-pay); }
+.src.bad { color: var(--c-cancel); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 18px 0 6px; font-family: var(--font-label); font-size: 20px; }
+.stats b { font: 400 34px/1 var(--font-display); margin-right: 6px; }
+.stats .s-action b { color: var(--c-action); }
+.stats .s-pay b { color: var(--c-pay); }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 12px 0 4px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: inherit; color: var(--chalk); background: transparent; cursor: pointer; }
+.btn { min-height: 40px; border: 2px dashed var(--chalk-dim); border-radius: 8px; padding: 4px 14px; font-family: var(--font-label); letter-spacing: .04em; }
+.btn:hover { border-color: var(--chalk); background: var(--hover); }
+.fchip { min-height: 40px; border: 2px solid transparent; border-radius: 20px; padding: 2px 14px; font-family: var(--font-label); font-size: 18px; letter-spacing: .04em; color: var(--chalk-dim); }
+.fchip:hover { color: var(--chalk); }
+.fchip[aria-pressed="true"] { color: var(--chalk); border-color: var(--chalk); transform: rotate(-1deg); }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--c-lead); outline-offset: 2px; }
+section { margin-top: 26px; min-width: 0; }
+section h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0 0 6px; padding-bottom: 4px;
+  font: 400 30px/1.1 var(--font-display); color: var(--accent); border-bottom: 3px solid var(--accent); text-wrap: balance; }
+section h2 .count { font-family: var(--font-label); font-size: 18px; color: var(--chalk-dim); }
+section h2 .sum { font-family: var(--font-label); font-size: 20px; margin-left: auto; color: var(--accent); }
+.none { margin: 8px 0 0; color: var(--chalk-dim); padding-left: 4px; }
+ul { list-style: none; margin: 0; padding: 0; }
+li.item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 10px 2px; border-bottom: 1px dashed var(--dash); }
+/* 40px tap target, 30px drawn box */
+.check { width: 40px; height: 40px; padding: 0; border: 0; position: relative; }
+.check::before { content: ""; position: absolute; left: 5px; top: 5px; width: 30px; height: 30px; border: 3px solid var(--accent); border-radius: 5px; transform: rotate(-2deg); box-sizing: border-box; }
+.check:hover::before { background: var(--hover); }
+.check[aria-checked="true"]::after { content: ""; position: absolute; left: 15px; top: 1px; width: 10px; height: 22px; border: solid var(--chalk); border-width: 0 5px 5px 0; transform: rotate(40deg); border-radius: 2px; }
+.main { min-width: 0; overflow-wrap: anywhere; padding-top: 4px; }
+.title { font-size: 22px; }
+.cust { font-family: var(--font-label); font-size: 15px; letter-spacing: .04em; color: var(--chalk-dim); }
+.detail { color: var(--chalk-dim); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 3px; font-family: var(--font-label); font-size: 16px; color: var(--chalk-dim); letter-spacing: .04em; }
+.old { color: var(--c-action); border: 2px solid var(--c-action); border-radius: 12px; padding: 0 9px; transform: rotate(-2deg); }
+.old.stale { color: var(--c-cancel); border-color: var(--c-cancel); }
+.who { color: var(--chalk); border-bottom: 2px solid var(--c-lead); padding: 0 2px; }
+.who::before { content: "\2192\00a0"; color: var(--c-lead); }
+.st { border: 2px dotted var(--chalk-dim); border-radius: 12px; padding: 0 9px; color: var(--chalk); }
+.st.waiting { border-color: var(--c-admin); color: var(--c-admin); }
+.st.in_progress { border-color: var(--c-ok); color: var(--c-ok); }
+.side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.amt { font: 400 26px/1 var(--font-display); color: var(--accent); white-space: nowrap; }
+.grab { min-height: 34px; border: 2px dashed var(--chalk-dim); border-radius: 8px; padding: 2px 10px; font-family: var(--font-label); font-size: 16px; letter-spacing: .04em; }
+a.mail { color: inherit; text-decoration: underline; text-decoration-style: wavy; text-decoration-color: var(--accent); text-underline-offset: 4px; }
+a.mail:hover { color: var(--accent); }
+a.grab { color: var(--chalk); text-decoration: none; display: inline-flex; align-items: center; }
+.grab.open { border-style: solid; border-color: var(--accent); color: var(--accent); }
+.grab:hover { border-color: var(--chalk); background: var(--hover); }
+.more { min-width: 40px; min-height: 34px; border: 0; border-radius: 8px; font-family: var(--font-label); font-size: 16px; color: var(--chalk-dim); letter-spacing: .04em; text-decoration: underline dotted; text-underline-offset: 4px; }
+.more:hover, .more[aria-expanded="true"] { color: var(--chalk); background: var(--hover); }
+li.done .title { text-decoration: line-through; text-decoration-thickness: 3px; color: var(--chalk-dim); }
+li.done .check::before { border-color: var(--chalk-dim); }
+.tray { margin-top: 34px; border-top: 4px double var(--chalk-dim); padding-top: 10px; }
+.tray summary { cursor: pointer; min-height: 40px; font: 400 26px/1.4 var(--font-display); color: var(--chalk-dim); }
+.empty { margin-top: 30px; text-align: center; font: 400 32px/1.2 var(--font-display); color: var(--chalk-dim); }
+.empty small { display: block; margin-top: 8px; font: 19px var(--font-body); }
+.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--chalk); color: var(--board-deep); padding: 6px 16px; border-radius: 8px; font-family: var(--font-label); z-index: 50; max-width: 90vw; }
+/* Assign / status menu */
+.pop { position: absolute; z-index: 40; width: min(320px, calc(100vw - 32px)); background: var(--pop); color: var(--chalk); border: 2px solid var(--chalk); border-radius: 10px; padding: 10px 12px 12px; box-shadow: 0 10px 28px var(--shadow); }
+.pop h3 { margin: 6px 0 4px; font: 400 22px/1.1 var(--font-display); }
+.pop .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.pop .opt { min-height: 40px; border: 2px dashed var(--chalk-dim); border-radius: 18px; padding: 2px 12px; font-family: var(--font-label); font-size: 17px; letter-spacing: .03em; }
+.pop .opt:hover { border-color: var(--chalk); }
+.pop .opt[aria-pressed="true"] { border-style: solid; border-color: var(--c-lead); color: var(--c-lead); }
+.pop .hist { margin: 10px 0 0; font-family: var(--font-label); font-size: 14px; color: var(--chalk-dim); letter-spacing: .03em; }
+@media (max-width: 520px) {
+  li.item { grid-template-columns: 40px minmax(0, 1fr); }
+  .side { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; }
+  .side .amt { margin-right: auto; }
+  section h2 { font-size: 26px; }
+  .sweep { text-align: left; }
+}
+@media (prefers-reduced-motion: no-preference) { .check::before { transition: background .15s; } }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="frame"><main class="board">
+  <header>
+    <h1>Dr. Pool inbox board</h1>
+    <div class="sweep"><span id="sweep">Waiting for the first sweep</span><span class="src" id="src">Connecting…</span></div>
+  </header>
+  <div class="stats" id="stats" aria-live="polite"></div>
+  <div class="tools">
+    <div class="filters" role="group" aria-label="Show">
+      <button class="fchip" type="button" data-f="all" aria-pressed="true">All</button>
+      <button class="fchip" type="button" data-f="unassigned" aria-pressed="false">Unassigned</button>
+      <button class="fchip" type="button" data-f="mine" aria-pressed="false">Mine</button>
+    </div>
+    <button class="btn" id="copyAll" type="button">Copy open list</button>
+  </div>
+  <div id="sections"></div>
+  <div class="empty" id="empty" hidden>Board is clear<small id="emptySub">Items from the hourly inbox sweep show up here. Check them off when handled.</small></div>
+  <details class="tray" id="tray" hidden><summary id="traySum">Done</summary><ul id="doneList"></ul></details>
+</main></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../shared/drpool.js"></script>
+<script>
+(async function () {
+  const me = await DrPool.requireLogin({ office: true });
+  if (!me) return;
+  DrPool.topBar('board');
+  const sb = DrPool.sb;
+
+  const BUCKETS = [
+    { key: 'action', label: 'Needs action', accent: 'var(--c-action)' },
+    { key: 'payments', label: 'Payments received', accent: 'var(--c-pay)', sum: true },
+    { key: 'approved', label: 'Estimates approved', accent: 'var(--c-ok)' },
+    { key: 'pending', label: 'Estimates pending / questions', accent: 'var(--c-ask)' },
+    { key: 'leads', label: 'New service requests & leads', accent: 'var(--c-lead)' },
+    { key: 'cancel', label: 'Cancellations', accent: 'var(--c-cancel)', always: true },
+    { key: 'complaints', label: 'Complaints / service concerns', accent: 'var(--c-warn)', always: true },
+    { key: 'admin', label: 'Contracts & property-management admin', accent: 'var(--c-admin)' },
+    { key: 'suppliers', label: 'Suppliers, vendors & internal', accent: 'var(--c-misc)' }
+  ];
+  const STATUS = { open: 'Open', in_progress: 'In progress', waiting: 'Waiting' };
+  const TZ = 'America/New_York';
+  const FKEY = 'drpool-board-filter';
+
+  let rows = [], meta = null, staff = [], loaded = false, busy = false, again = false, lastLoad = 0;
+  let filter = 'all';
+  try { filter = localStorage.getItem(FKEY) || (DrPool.getView() === 'mine' ? 'mine' : 'all'); } catch (e) {}
+  if (!['all', 'unassigned', 'mine'].includes(filter)) filter = 'all';
+
+  const $ = id => document.getElementById(id);
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2600); }
+  function setSrc(text, cls) { const s = $('src'); s.textContent = text; s.className = 'src' + (cls ? ' ' + cls : ''); }
+  const dayKey = d => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  function fmtTime(iso) {
+    const d = new Date(iso); if (!iso || isNaN(d)) return '';
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' }).format(d);
+    const tm = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(d);
+    return (dayKey(d) === dayKey(new Date()) ? 'Today' : day) + ' ' + tm;
+  }
+  function ageDays(iso) { const d = new Date(iso); if (isNaN(d)) return 0; return Math.round((Date.parse(dayKey(new Date())) - Date.parse(dayKey(d))) / 86400000); }
+  const ts = iso => { const t = Date.parse(iso); return isNaN(t) ? 0 : t; };
+  const money = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isLink = l => typeof l === 'string' && l.indexOf('https://') === 0;
+  const plain = it => it.title + (it.detail ? ' - ' + it.detail : '') + (it.amount != null ? ' (' + money(it.amount) + ')' : '') + ' [' + fmtTime(it.at) + ']' + (it.assigned_to ? ' -> ' + it.assigned_to : '');
+  function copy(text, ok) {
+    function fallback() {
+      const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); let done = false;
+      try { done = document.execCommand('copy'); } catch (e) {}
+      ta.remove(); toast(done ? ok : 'Copy did not work. Select the text and copy it by hand.');
+    }
+    try { navigator.clipboard.writeText(text).then(() => toast(ok), fallback); } catch (e) { fallback(); }
+  }
+
+  /* ---------- data ---------- */
+  function norm(r) {
+    const c = r.customers || null;
+    return {
+      ...r, id: String(r.id), title: r.title || '',
+      amount: r.amount == null || r.amount === '' ? null : Number(r.amount),
+      status: r.done ? 'done' : (r.status && r.status !== 'done' ? r.status : 'open'),
+      acct: c && c.account_no || null, cust: c && c.name || null
+    };
+  }
+  async function load() {
+    if (busy) { again = true; return; }
+    busy = true;
+    try {
+      const since = new Date(Date.now() - 7 * 86400000).toISOString();
+      const [it, mt] = await Promise.all([
+        sb.from('chalkboard_items').select('*, customers(account_no,name)').or('done.eq.false,done_at.gt.' + since).order('at', { ascending: true }).limit(1000),
+        sb.from('board_meta').select('value,updated_at').eq('key', 'board').maybeSingle()
+      ]);
+      if (it.error) throw it.error;
+      rows = (it.data || []).map(norm);
+      meta = mt.data ? (mt.data.value || {}) : null;
+      loaded = true; lastLoad = Date.now();
+      render();
+      setSrc(rtLive ? 'Live' : 'Updates every minute', rtLive ? 'live' : '');
+    } catch (e) {
+      console.warn('board load', e);
+      if (!loaded) { $('empty').hidden = false; $('empty').firstChild.textContent = 'Could not load the board'; $('emptySub').textContent = 'Check your connection. It will try again in a minute.'; }
+      setSrc(/permission|policy|42501/i.test(e && (e.message || e.code) || '') ? 'No access to the board' : 'Offline. Retrying every minute', 'bad');
+    } finally {
+      busy = false;
+      if (again) { again = false; load(); }
+    }
+  }
+  async function loadStaff() {
+    const { data } = await sb.from('staff').select('id,display_name,active').eq('active', true).order('display_name');
+    staff = (data || []).filter(s => s.display_name);
+  }
+
+  async function logActivity(id, action, value) {
+    const { error } = await sb.from('chalkboard_activity').insert({ item_id: id, by_name: me.name, action, value: value == null ? null : String(value) });
+    if (error) console.warn('activity log', error);
+  }
+  function patchLocal(id, patch) { rows = rows.map(r => r.id === id ? norm({ ...r, ...patch }) : r); render(); }
+  async function save(it, patch, action, value) {
+    const before = {}; Object.keys(patch).forEach(k => { before[k] = it[k]; });
+    patchLocal(it.id, patch);
+    const { error } = await sb.from('chalkboard_items').update(patch).eq('id', it.id).select('id');
+    if (error) {
+      patchLocal(it.id, before);
+      toast(/permission|policy|42501/i.test(error.message + error.code) ? 'You can view this board but not change it.' : 'Could not save. Try again.');
+      return false;
+    }
+    logActivity(it.id, action, value);
+    return true;
+  }
+  function toggle(it) {
+    const nowDone = !it.done;
+    const patch = nowDone
+      ? { done: true, status: 'done', done_by: me.name, done_at: new Date().toISOString() }
+      : { done: false, status: 'open', done_by: null, done_at: null };
+    save(it, patch, nowDone ? 'done' : 'reopened', null).then(ok => { if (ok) toast(nowDone ? 'Checked off' : 'Back on the board'); });
+  }
+
+  /* ---------- assign / status menu ---------- */
+  let popEl = null, popBtn = null;
+  function closePop() { if (popEl) { popEl.remove(); popEl = null; } if (popBtn) { popBtn.setAttribute('aria-expanded', 'false'); popBtn.focus({ preventScroll: true }); popBtn = null; } }
+  function openPop(it, btn) {
+    if (popBtn === btn) { closePop(); return; }
+    closePop();
+    const p = el('div', 'pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Assign or set status: ' + it.title);
+    p.appendChild(el('h3', null, 'Assign to'));
+    const a = el('div', 'opts');
+    const people = staff.map(s => ({ name: s.display_name, id: s.id })).concat([{ name: 'Office', id: null }]);
+    people.forEach(pp => {
+      const b = el('button', 'opt', pp.name); b.type = 'button'; b.setAttribute('aria-pressed', String(it.assigned_to === pp.name));
+      b.onclick = () => { closePop(); if (it.assigned_to !== pp.name) save(it, { assigned_to: pp.name, assigned_staff_id: pp.id }, 'assigned', pp.name).then(ok => ok && toast('Assigned to ' + pp.name)); };
+      a.appendChild(b);
+    });
+    if (it.assigned_to) {
+      const b = el('button', 'opt', 'Nobody'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+      b.onclick = () => { closePop(); save(it, { assigned_to: null, assigned_staff_id: null }, 'unassigned', null).then(ok => ok && toast('Unassigned')); };
+      a.appendChild(b);
+    }
+    p.appendChild(a);
+    if (!it.done) {
+      p.appendChild(el('h3', null, 'Status'));
+      const s = el('div', 'opts');
+      Object.keys(STATUS).forEach(k => {
+        const b = el('button', 'opt', STATUS[k]); b.type = 'button'; b.setAttribute('aria-pressed', String(it.status === k));
+        b.onclick = () => { closePop(); if (it.status !== k) save(it, { status: k }, 'status', k).then(ok => ok && toast('Marked ' + STATUS[k].toLowerCase())); };
+        s.appendChild(b);
+      });
+      p.appendChild(s);
+    }
+    const hist = el('p', 'hist', 'Loading history…'); p.appendChild(hist);
+    sb.from('chalkboard_activity').select('at,by_name,action,value').eq('item_id', it.id).order('at', { ascending: false }).limit(4).then(({ data, error }) => {
+      if (error || !data || !data.length) { hist.textContent = error ? '' : 'No changes yet.'; return; }
+      hist.textContent = data.map(h => (h.by_name || 'Someone') + ' ' + ({ done: 'checked it off', reopened: 'reopened it', assigned: 'assigned ' + h.value, unassigned: 'unassigned it', status: 'set ' + (STATUS[h.value] || h.value || '').toLowerCase() }[h.action] || h.action) + ', ' + fmtTime(h.at)).join('\n');
+      hist.style.whiteSpace = 'pre-line';
+    });
+    document.body.appendChild(p);
+    const r = btn.getBoundingClientRect();
+    const left = Math.max(16, Math.min(r.right - p.offsetWidth, document.documentElement.clientWidth - p.offsetWidth - 16));
+    p.style.left = (left + window.scrollX) + 'px';
+    p.style.top = (r.bottom + window.scrollY + 6) + 'px';
+    btn.setAttribute('aria-expanded', 'true');
+    popEl = p; popBtn = btn;
+    const first = p.querySelector('.opt'); if (first) first.focus({ preventScroll: true });
+  }
+  document.addEventListener('click', e => { if (popEl && !popEl.contains(e.target) && e.target !== popBtn) closePop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && popEl) closePop(); });
+
+  /* ---------- render ---------- */
+  function row(it, accent) {
+    const li = el('li', 'item' + (it.done ? ' done' : ''));
+    li.style.setProperty('--accent', accent);
+    const cb = el('button', 'check'); cb.type = 'button'; cb.setAttribute('role', 'checkbox');
+    cb.setAttribute('aria-checked', it.done ? 'true' : 'false'); cb.setAttribute('aria-label', (it.done ? 'Reopen: ' : 'Mark done: ') + it.title);
+    cb.addEventListener('click', () => toggle(it));
+    const main = el('div', 'main');
+    const ttl = el('div', 'title');
+    if (isLink(it.link)) { const a = el('a', 'mail', it.title); a.href = it.link; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = 'Open this email in Outlook to read and reply'; ttl.appendChild(a); }
+    else ttl.textContent = it.title;
+    main.appendChild(ttl);
+    if (it.acct || it.cust) main.appendChild(el('div', 'cust', [it.acct ? '#' + it.acct : '', it.cust || ''].filter(Boolean).join(' · ')));
+    if (it.detail) main.appendChild(el('div', 'detail', it.detail));
+    const m = el('div', 'meta');
+    m.appendChild(el('span', null, fmtTime(it.at)));
+    const age = ageDays(it.at);
+    if (!it.done && age >= 1) m.appendChild(el('span', 'old' + (age >= 3 ? ' stale' : ''), age === 1 ? 'from yesterday' : 'still open: ' + age + ' days'));
+    if (it.assigned_to) { const w = el('span', 'who', it.assigned_to); w.title = 'Assigned to ' + it.assigned_to; m.appendChild(w); }
+    if (!it.done && it.status && it.status !== 'open') m.appendChild(el('span', 'st ' + it.status, STATUS[it.status] || it.status));
+    if (it.done) m.appendChild(el('span', null, 'done ' + (it.done_by ? 'by ' + it.done_by + ' ' : '') + fmtTime(it.done_at)));
+    main.appendChild(m);
+    const side = el('div', 'side');
+    if (it.amount != null) side.appendChild(el('div', 'amt', money(it.amount)));
+    if (isLink(it.link)) { const o = el('a', 'grab open', 'Open email'); o.href = it.link; o.target = '_blank'; o.rel = 'noopener noreferrer'; side.appendChild(o); }
+    const g = el('button', 'grab', 'Copy reminder'); g.type = 'button';
+    g.addEventListener('click', () => copy(plain(it), 'Reminder copied'));
+    side.appendChild(g);
+    const mo = el('button', 'more', it.assigned_to ? 'Change' : 'Assign'); mo.type = 'button';
+    mo.setAttribute('aria-haspopup', 'dialog'); mo.setAttribute('aria-expanded', 'false'); mo.setAttribute('aria-label', 'Assign or set status: ' + it.title);
+    mo.addEventListener('click', () => openPop(it, mo));
+    side.appendChild(mo);
+    li.append(cb, main, side);
+    return li;
+  }
+  const passes = it => filter === 'all' ? true : filter === 'unassigned' ? !it.assigned_to : (it.assigned_to === me.name || (it.assigned_staff_id && it.assigned_staff_id === me.id));
+
+  function render() {
+    if (popEl) closePop();
+    document.querySelectorAll('.fchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === filter)));
+    const vis = rows.filter(passes);
+    const open = vis.filter(i => !i.done).sort((a, b) => ts(a.at) - ts(b.at));
+    const done = vis.filter(i => i.done).sort((a, b) => ts(b.done_at) - ts(a.done_at));
+    const host = $('sections'); host.textContent = '';
+    let payOpen = 0;
+    const sec = (label, accent, list, b) => {
+      const s = el('section'); s.style.setProperty('--accent', accent);
+      const h = el('h2'); h.appendChild(el('span', null, label));
+      h.appendChild(el('span', 'count', list.length ? list.length + ' open' : ''));
+      if (b && b.sum && list.length) { const t = list.reduce((x, i) => x + (Number(i.amount) || 0), 0); payOpen = t; h.appendChild(el('span', 'sum', 'total ' + money(t))); }
+      s.appendChild(h);
+      if (!list.length) s.appendChild(el('p', 'none', 'None'));
+      else { const ul = el('ul'); list.forEach(i => ul.appendChild(row(i, accent))); s.appendChild(ul); }
+      host.appendChild(s);
+    };
+    BUCKETS.forEach(b => {
+      const list = open.filter(i => i.bucket === b.key);
+      if (list.length || (b.always && filter === 'all')) sec(b.label, b.accent, list, b);
+    });
+    const known = BUCKETS.map(b => b.key);
+    const odd = open.filter(i => !known.includes(i.bucket));
+    if (odd.length) sec('Other', 'var(--c-misc)', odd);
+    const emp = $('empty');
+    emp.hidden = !loaded || open.length > 0;
+    if (filter === 'all') { emp.firstChild.textContent = 'Board is clear'; $('emptySub').textContent = 'Items from the hourly inbox sweep show up here. Check them off when handled.'; }
+    else { emp.firstChild.textContent = filter === 'mine' ? 'Nothing assigned to you' : 'Everything is assigned'; $('emptySub').textContent = 'Switch to All to see the whole board.'; }
+    const st = $('stats'); st.textContent = '';
+    const stat = (cls, n, label) => { const d = el('div', cls); d.appendChild(el('b', null, n)); d.appendChild(document.createTextNode(label)); st.appendChild(d); };
+    if (loaded) {
+      stat('s-open', String(open.length), 'open');
+      stat('s-action', String(open.filter(i => i.bucket === 'action').length), 'need action');
+      stat('s-pay', money(payOpen), 'payments to log');
+    }
+    const tray = $('tray'), dl = $('doneList'); dl.textContent = '';
+    tray.hidden = done.length === 0;
+    $('traySum').textContent = 'Done this week (' + done.length + ')';
+    done.forEach(i => dl.appendChild(row(i, 'var(--chalk-dim)')));
+    if (meta && meta.updatedAt) $('sweep').textContent = 'Last sweep ' + fmtTime(meta.updatedAt) + (meta.window ? ' · covers ' + meta.window : '');
+  }
+
+  document.querySelectorAll('.fchip').forEach(b => b.addEventListener('click', () => {
+    filter = b.dataset.f; try { localStorage.setItem(FKEY, filter); } catch (e) {} render();
+  }));
+  document.addEventListener('drpool:view', e => { filter = e.detail === 'mine' ? 'mine' : 'all'; try { localStorage.setItem(FKEY, filter); } catch (er) {} render(); });
+  $('copyAll').addEventListener('click', () => {
+    const lines = [];
+    const vis = rows.filter(i => !i.done && passes(i));
+    BUCKETS.forEach(b => {
+      const l = vis.filter(i => i.bucket === b.key); if (!l.length) return;
+      lines.push(b.label.toUpperCase()); l.forEach(i => lines.push('- ' + plain(i)));
+    });
+    copy(lines.length ? 'Dr. Pool open items\n' + lines.join('\n') : 'Nothing open.', 'Open list copied');
+  });
+
+  /* ---------- live updates: realtime + 60 s polling fallback ---------- */
+  let rtLive = false, rtTimer = null;
+  const soon = () => { clearTimeout(rtTimer); rtTimer = setTimeout(load, 400); };
+  try {
+    sb.channel('chalkboard-items')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chalkboard_items' }, soon)
+      .subscribe(status => {
+        rtLive = status === 'SUBSCRIBED';
+        if (loaded) setSrc(rtLive ? 'Live' : 'Updates every minute', rtLive ? 'live' : '');
+      });
+  } catch (e) { console.warn('realtime', e); }
+  setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - lastLoad > 30000) load(); });
+
+  render();
+  loadStaff().catch(() => {});
+  load();
+})();
+</script>
+</body>
+</html>
