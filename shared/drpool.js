@@ -44,10 +44,16 @@
     return me;
   }
 
-  /* "Office" view switch: people with office access may look at everything; remembered per device. */
+  /* View switch: only the owner (Daniel) picks "Everything" or "Mine + Office"; remembered per device.
+     Everyone else simply sees what the database returns for them ('all'). */
   const viewKey = 'drpool-view';
-  function getView() { if (!ME || !ME.office) return 'mine'; try { return localStorage.getItem(viewKey) || 'office'; } catch (e) { return 'office'; } }
-  function setView(v) { try { localStorage.setItem(viewKey, v); } catch (e) {} }
+  const isOwner = () => !!(ME && ME.role === 'owner');
+  function getView() {
+    if (!isOwner()) return 'all';
+    let v = 'all'; try { v = localStorage.getItem(viewKey) || 'all'; } catch (e) {}
+    return v === 'mine' ? 'mine' : 'all';
+  }
+  function setView(v) { try { localStorage.setItem(viewKey, v === 'mine' ? 'mine' : 'all'); } catch (e) {} }
 
   /* Top bar shared by every page: app links, who is signed in, view switch, password, sign out. */
   function topBar(current) {
@@ -57,12 +63,12 @@
       <a href="${root()}crm/" ${current === 'crm' ? 'aria-current="page"' : ''}>CRM</a>
       ${ME && ME.office ? `<a href="${root()}board/" ${current === 'board' ? 'aria-current="page"' : ''}>Chalkboard</a>` : ''}
       <span class="sp"></span>
-      ${ME && ME.office ? `<label class="vw">View <select id="drview"><option value="office">Office (everything)</option><option value="mine">Just mine</option></select></label>` : ''}
+      ${isOwner() ? `<label class="vw">View <select id="drview"><option value="all">Everything</option><option value="mine">Mine + Office</option></select></label>` : ''}
       <button type="button" id="drme" class="me"></button>`;
     const st = document.createElement('style');
     st.textContent = `#drbar{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:center;padding:8px 16px;font:500 14px system-ui,-apple-system,sans-serif;background:#0b2d38;color:#e6f3f5}
 #drbar a{color:#9fe3ee;text-decoration:none}#drbar a[aria-current]{color:#fff;font-weight:700}#drbar .lb{opacity:.65}
-#drbar .sp{flex:1}#drbar select{font:inherit;background:#ffffff1a;color:#fff;border:1px solid #ffffff40;border-radius:6px;padding:2px 6px}
+#drbar .sp{flex:1}#drbar .vw{display:inline-flex;gap:6px;align-items:center;color:inherit;font-size:13px;font-weight:500}#drbar select{width:auto;min-height:0;margin:0;font:inherit;background:#ffffff1a;color:#fff;border:1px solid #ffffff40;border-radius:6px;padding:2px 6px}
 #drbar select option{color:#06303b}#drbar .me{font:inherit;background:none;border:1px solid #ffffff50;color:#fff;border-radius:99px;padding:3px 12px;cursor:pointer}
 #drmenu{position:absolute;right:12px;z-index:99;background:#fff;color:#06303b;border-radius:10px;box-shadow:0 10px 30px #0004;padding:12px;display:grid;gap:8px;min-width:220px;font:14px system-ui,sans-serif}
 #drmenu input{font:inherit;padding:6px 8px;border:1px solid #c7e2e6;border-radius:6px}#drmenu button{font:inherit;padding:6px 10px;border-radius:6px;border:0;background:#0a5a6b;color:#fff;cursor:pointer}
@@ -89,5 +95,5 @@
     return bar;
   }
 
-  window.DrPool = { sb, signIn, signOut, changePassword, requireLogin, loadMe, getView, setView, topBar, get me() { return ME; }, toEmail, root };
+  window.DrPool = { sb, signIn, signOut, changePassword, requireLogin, loadMe, getView, setView, topBar, isOwner, get me() { return ME; }, toEmail, root };
 })();
