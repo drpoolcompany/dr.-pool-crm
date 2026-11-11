@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Pool Prospect Board</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="prospects.css">
+</head>
+<body>
+<header class="ph"><div class="wr"><div class="top">
+  <h1>Prospect Board</h1><span class="hsub" id="asof">Loading…</span>
+  <div class="hact"><button type="button" class="btn ghost" id="refBtn">Refresh</button><button type="button" class="btn ghost" id="addBtn" disabled>Add prospect</button></div>
+</div></div></header>
+<main class="wr">
+  <div id="warn"></div>
+  <div class="addbox" id="addBox" hidden><form id="addForm" autocomplete="off">
+    <label>Name<input type="text" name="name"></label>
+    <label>Email<input type="email" name="email"></label>
+    <label>Phone<input type="tel" name="phone"></label>
+    <label>Address<input type="text" name="address"></label>
+    <label>Stage<select name="stage" class="mv"><option value="needs_reply">We owe them a reply</option><option value="agreement_sent">Agreement sent, not signed</option><option value="signed">Signed</option></select></label>
+    <label class="wide">What they want<textarea name="request" rows="2"></textarea></label>
+    <div class="wide row"><button type="submit" class="btn" id="addSave">Add</button><button type="button" class="btn o" id="addCancel">Cancel</button><span class="msg" id="addMsg" role="status"></span></div>
+  </form></div>
+  <div class="sum" id="sum"></div>
+  <div id="main"><div class="state"><b>Loading prospects…</b></div></div>
+  <footer>Notes, moves, new prospects and customer links are saved for everyone with office access. Cards never move on their own. Days count from the date the agreement or last message went out, to today (Eastern time). This page never creates customers; it only links a signed prospect to an existing one.</footer>
+</main>
+<div class="toast" id="toast" hidden role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../shared/drpool.js"></script>
+<script>
+(async function () {
+  const TZ = 'America/New_York';
+  const LANES = [
+    { t: 'We owe them a reply', hint: 'New requests with no agreement sent yet.', stages: ['new', 'needs_reply'], to: 'needs_reply' },
+    { t: 'Agreement sent, not signed', hint: 'Waiting on the customer.', stages: ['agreement_sent'], to: 'agreement_sent' },
+    { t: 'Signed in the last 3 weeks', hint: 'Link each one to its customer record.', stages: ['signed'], to: 'signed' },
+    { t: 'Lost', hint: 'Not moving forward. Kept for the record.', stages: ['lost'], to: 'lost' }
+  ];
+  const COLS = 'id,legacy_id,name,email,phone,address,city,request,note,stage,agreement_sent_at,signed_at,last_contact_at,link,source,customer_id,created_at,updated_at';
+  const PEN = '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+  /* ---------- pure helpers ---------- */
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function safeUrl(u) { return typeof u === 'string' && /^https:\/\//i.test(u) ? u : null; }
+  function etDay(v) { // Date | ISO string -> 'YYYY-MM-DD' in New York
+    const d = v instanceof Date ? v : new Date(v);
+    if (isNaN(d)) return null;
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  }
+  function dayNum(s) { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(s || '')); return m ? Date.UTC(+m[1], m[2] - 1, +m[3]) / 864e5 : null; }
+  function daysBetween(fromDay, toDay) { const a = dayNum(fromDay), b = dayNum(toDay); return a == null || b == null ? null : Math.round(b - a); }
+  function mdShort(s) { const n = dayNum(s); return n == null ? '' : new Date(n * 864e5).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); }
+  function fmtTs(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: TZ }) + ', ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+  }
+  function laneOf(stage) { return stage === 'agreement_sent' ? 1 : stage === 'signed' ? 2 : stage === 'lost' ? 3 : 0; }
+  function refDay(r) { // date the waiting clock runs from, as ET date string
+    const l = laneOf(r.stage);
+    const c = l === 1 ? [r.agreement_sent_at, r.last_contact_at] : l === 2 ? [r.signed_at, r.last_contact_at] : [r.last_contact_at, r.agreement_sent_at];
+    for (const x of c) if (x) return x;
+    return r.created_at ? etDay(r.created_at) : null;
+  }
+  function movePatch(stage, today, nowIso) { // columns to write when moving to `stage`
+    const p = { stage, updated_at: nowIso };
+    if (stage === 'agreement_sent') { p.agreement_sent_at = today; p.last_contact_at = today; }
+    else if (stage === 'signed') { p.signed_at = today; p.last_contact_at = today; }
+    else if (stage === 'needs_reply') { p.last_contact_at = today; }
+    return p;
+  }
+  function likeToken(t) { // one search word -> safe ilike pattern for a PostgREST or() filter
+    const clean = String(t).replace(/[,()"':*]/g, ' ').trim().replace(/[\\%_]/g, m => '\\' + m);
+    return clean ? '%' + clean + '%' : null;
+  }
+  function custTokens(q) { return String(q || '').split(/\s+/).map(likeToken).filter(Boolean).slice(0, 5); }
+  function errText(e) {
+    const m = String((e && e.message) || e || ''), c = e && e.code;
+    if (c === '42501' || /row-level security|permission denied/i.test(m)) return 'You do not have permission for this (office access is required).';
+    if (/failed to fetch|networkerror|load failed/i.test(m)) return 'Cannot reach the server. Check your internet connection and try again.';
+    if (/jwt|not authenticated|expired/i.test(m)) return 'Your sign-in expired. Reload the page and sign in again.';
+    return 'Something went wrong' + (m ? ': ' + m.slice(0, 160) : '') + '.';
+  }
+  window.__pure = { esc, etDay, daysBetween, movePatch, likeToken, custTokens, laneOf, refDay }; // for node tests
+
+  /* ---------- sign-in ---------- */
+  const me = await DrPool.requireLogin({ office: true });
+  if (!me) return;
+  DrPool.topBar('prospects');
+  const sb = DrPool.sb;
+  const $ = id => document.getElementById(id);
+
+  /* ---------- state ---------- */
+  let ROWS = [], NOTES = {}, INBOX = {}, CUST = {}, LATEST = null, INBOX_OK = true;
+  const UI = { lost: false, older: false, link: null, noteOpen: null, drafts: {}, busy: false };
+
+  let toastT = 0;
+  function toast(m, bad) { const t = $('toast'); t.textContent = m; t.className = 'toast' + (bad ? ' bad' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, bad ? 7000 : 3200); }
+
+  /* ---------- data ---------- */
+  async function load() {
+    $('refBtn').disabled = true;
+    try {
+      const [p, n] = await Promise.all([
+        sb.from('prospects').select(COLS).order('created_at', { ascending: true }).limit(800),
+        sb.from('prospect_notes').select('id,prospect_id,body,by_name,created_at').order('created_at', { ascending: false }).limit(3000)
+      ]);
+      if (p.error) throw p.error;
+      if (n.error) throw n.error;
+      ROWS = p.data || [];
+      NOTES = {};
+      (n.data || []).forEach(x => { (NOTES[x.prospect_id] = NOTES[x.prospect_id] || []).push(x); });
+      await loadExtras();
+      LATEST = ROWS.reduce((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
+      render();
+    } catch (e) {
+      $('sum').innerHTML = '';
+      $('main').innerHTML = '<div class="state bad"><b>' + (/permission|row-level|office access/i.test(errText(e)) ? 'Not permitted' : 'Could not load prospects') + '</b>' + esc(errText(e)) + '</div>';
+      $('asof').textContent = 'Not loaded';
+    }
+    $('refBtn').disabled = false;
+    $('addBtn').disabled = false;
+  }
+  async function loadExtras() { // one batched query for inbox, one for linked customers
+    INBOX_OK = true;
+    const emails = new Set(ROWS.filter(r => r.email).map(r => r.email.trim().toLowerCase()));
+    INBOX = {};
+    if (emails.size) {
+      const r = await sb.from('chalkboard_items').select('contact_email,link,at').eq('done', false).not('contact_email', 'is', null).order('at', { ascending: true }).limit(2000);
+      if (r.error) INBOX_OK = false;
+      else (r.data || []).forEach(i => {
+        const k = String(i.contact_email || '').trim().toLowerCase();
+        if (!emails.has(k)) return;
+        const o = INBOX[k] || (INBOX[k] = { n: 0, link: null });
+        o.n++; if (!o.link && i.link) o.link = i.link;
+      });
+    }
+    const ids = [...new Set(ROWS.filter(r => r.customer_id).map(r => r.customer_id))];
+    CUST = {};
+    if (ids.length) {
+      const c = await sb.from('v_customer_360').select('id,account_no,name,route_no,tech_name').in('id', ids);
+      if (c.error) INBOX_OK = false;
+      else (c.data || []).forEach(x => { CUST[x.id] = x; });
+    }
+  }
+
+  /* ---------- render ---------- */
+  function cardHtml(r, li, today) {
+    const d = daysBetween(refDay(r), today), done = li === 2, lost = li === 3;
+    const cls = done ? 'ok' : lost ? '' : d != null && d >= 14 ? 'bad' : d != null && d >= 5 ? 'warn' : '';
+    const label = d == null ? 'no date' : done ? d + 'd ago' : d <= 0 ? 'today' : d + 'd';
+    const nm = r.name ? r.name + (r.city && r.name.indexOf(r.city) < 0 ? ', ' + r.city : '') : 'Name not shown';
+    const notes = NOTES[r.id] || [], u = safeUrl(r.link);
+    let h = '<div class="card" data-id="' + esc(r.id) + '"><div class="tp"><div class="nm' + (r.name ? '' : ' unk') + '">' + esc(nm) + '</div><div class="age ' + cls + '" title="Counted from ' + esc(mdShort(refDay(r))) + '">' + esc(label) + '</div></div>';
+    const ct = [];
+    if (r.email) ct.push('<a href="mailto:' + esc(r.email) + '">' + esc(r.email) + '</a><button type="button" class="cp" data-copy="' + esc(r.email) + '" aria-label="Copy email">Copy</button>');
+    if (r.phone) ct.push('<a href="tel:' + esc(String(r.phone).replace(/[^0-9+]/g, '')) + '">' + esc(r.phone) + '</a><button type="button" class="cp" data-copy="' + esc(r.phone) + '" aria-label="Copy phone">Copy</button>');
+    if (ct.length) h += '<div class="ct">' + ct.join('</div><div class="ct">') + '</div>'; else if (!done) h += '<div class="ct">Email not captured</div>';
+    if (r.address) h += '<div class="ct">' + esc(r.address) + '</div>';
+    if (r.request) h += '<div class="what">' + esc(r.request) + '</div>';
+    if (r.note) h += '<div class="nt">' + esc(r.note) + '</div>';
+    let sl = '';
+    if (li === 1 && r.agreement_sent_at) sl = 'Agreement sent ' + mdShort(r.agreement_sent_at);
+    else if (done && r.signed_at) sl = 'Signed ' + mdShort(r.signed_at);
+    else if (r.last_contact_at) sl = 'Last contact ' + mdShort(r.last_contact_at);
+    else if (r.created_at) sl = 'Added ' + mdShort(etDay(r.created_at));
+    if (r.source === 'manual') sl += (sl ? ' · ' : '') + 'added by hand';
+    if (sl) h += '<div class="sent">' + esc(sl) + '</div>';
+    let chips = '';
+    if (u) chips += '<a class="chip" href="' + esc(u) + '" target="_blank" rel="noopener">Open email in Outlook</a>';
+    const ib = r.email ? INBOX[r.email.trim().toLowerCase()] : null;
+    if (ib && ib.n > 0) { const iu = safeUrl(ib.link), t = ib.n + ' open inbox item' + (ib.n === 1 ? '' : 's'); chips += iu ? '<a class="chip inbox" href="' + esc(iu) + '" target="_blank" rel="noopener">' + t + '</a>' : '<span class="chip inbox">' + t + '</span>'; }
+    if (r.customer_id) {
+      const c = CUST[r.customer_id];
+      chips += '<span class="chip cust">' + (c ? 'Customer' + (c.account_no ? ' #' + esc(c.account_no) : '') + (c.name ? ' · ' + esc(c.name) : '') + ' · ' + (c.route_no != null ? 'Route ' + esc(c.route_no) + (c.tech_name ? ' · ' + esc(c.tech_name) : '') : 'not on this week’s schedule') : 'Linked to a customer') + '</span>';
+      if (done) chips += '<button type="button" class="chip linkbtn">Change</button>';
+    } else if (done) chips += '<button type="button" class="chip linkbtn">Link to customer</button>';
+    if (chips) h += '<div class="chips">' + chips + '</div>';
+    if (UI.link && UI.link.id === r.id) h += '<div class="linkbox"><input type="search" class="lq" value="' + esc(UI.link.q) + '" placeholder="Search customers: name, address or account #" aria-label="Search customers"><div class="lres" aria-live="polite"></div><div class="row"><button type="button" class="btn o lclose">Close</button></div></div>';
+    if (notes.length) h += '<div class="nlist">' + notes.map(n => '<div class="ne">' + esc(n.body) + '<span class="nd">' + esc(fmtTs(n.created_at)) + (n.by_name ? ' · ' + esc(n.by_name) : '') + '</span></div>').join('') + '</div>';
+    const open = UI.noteOpen === r.id;
+    h += '<div class="nform"' + (open ? '' : ' hidden') + '><textarea rows="3" placeholder="Add a note" aria-label="New note for ' + esc(nm) + '">' + esc(UI.drafts[r.id] || '') + '</textarea><div class="row"><button type="button" class="btn save">Save note</button><button type="button" class="btn o cancel">Cancel</button></div></div>';
+    h += '<div class="actions"><select class="mv" aria-label="Move ' + esc(nm) + ' to">';
+    LANES.forEach((L, j) => { h += '<option value="' + j + '"' + (j === li ? ' selected' : '') + '>' + (j === li ? 'In: ' : 'Move to: ') + esc(L.t) + '</option>'; });
+    h += '</select><button type="button" class="pen' + (notes.length ? ' has' : '') + '" aria-label="Add a note">' + PEN + '</button></div></div>';
+    return h;
+  }
+  function render() {
+    const today = etDay(new Date());
+    const b = [[], [], [], []]; let older = 0;
+    ROWS.forEach(r => {
+      const i = laneOf(r.stage);
+      if (i === 2) { const d = daysBetween(refDay(r), today); if (d != null && d > 21) { older++; if (!UI.older) return; } }
+      b[i].push(r);
+    });
+    const asc = (x, y) => String(refDay(x) || '').localeCompare(String(refDay(y) || ''));
+    b[0].sort(asc); b[1].sort(asc); b[2].sort((x, y) => -asc(x, y));
+    const lostTotal = b[3].length;
+    let html = '';
+    for (let i = 0; i < (UI.lost ? 4 : 3); i++) {
+      html += '<section class="lane"><h2><span>' + esc(LANES[i].t) + '</span><em>' + b[i].length + '</em></h2><p class="hint">' + esc(LANES[i].hint) + '</p><div class="cards">';
+      b[i].forEach(r => { html += cardHtml(r, i, today); });
+      if (!b[i].length) html += '<p class="empty">' + (i === 2 && older ? 'Nobody signed in the last 3 weeks.' : 'Nothing here.') + '</p>';
+      if (i === 2 && older) html += '<button type="button" class="tog" id="togOlder">' + (UI.older ? 'Hide' : 'Show') + ' signed more than 3 weeks ago (' + older + ')</button>';
+      html += '</div></section>';
+    }
+    if (!ROWS.length) html = '<div class="state"><b>No prospects yet</b>Use “Add prospect” to add the first one.</div>';
+    $('main').innerHTML = html;
+    $('sum').innerHTML = '<div><b>' + b[0].length + '</b><span>we owe a reply</span></div><div><b>' + b[1].length + '</b><span>waiting on a signature</span></div><div><b>' + b[2].length + '</b><span>signed' + (UI.older ? '' : ' in the last 3 weeks') + '</span></div>' +
+      (lostTotal || UI.lost ? '<div><button type="button" class="tog" id="togLost">' + (UI.lost ? 'Hide' : 'Show') + ' lost (' + lostTotal + ')</button></div>' : '');
+    $('asof').textContent = 'Last change ' + (LATEST ? fmtTs(LATEST) + ' ET' : 'unknown') + ' · ' + ROWS.length + ' prospects';
+    $('warn').innerHTML = INBOX_OK ? '' : '<div class="warnbar">Inbox badges or customer details could not be loaded. The rest of the board is current.</div>';
+    if (UI.link) linkSearch();
+  }
+  const byId = id => ROWS.find(r => r.id === id);
+
+  /* ---------- actions ---------- */
+  function touch(row, patch) { Object.assign(row, patch); if (patch.updated_at && (!LATEST || patch.updated_at > LATEST)) LATEST = patch.updated_at; }
+  async function addNote(r, text, btn) {
+    btn.disabled = true;
+    try {
+      const ins = await sb.from('prospect_notes').insert({ prospect_id: r.id, body: text, by_name: me.name }).select('id,prospect_id,body,by_name,created_at').single();
+      if (ins.error) throw ins.error;
+      (NOTES[r.id] = NOTES[r.id] || []).unshift(ins.data);
+      const now = new Date().toISOString();
+      const up = await sb.from('prospects').update({ updated_at: now }).eq('id', r.id);
+      if (!up.error) touch(r, { updated_at: now });
+      delete UI.drafts[r.id]; UI.noteOpen = null; render(); toast('Note saved.');
+    } catch (e) { btn.disabled = false; toast('Note not saved. ' + errText(e), true); }
+  }
+  async function moveTo(sel, r, lane) {
+    const L = LANES[lane]; if (!L || laneOf(r.stage) === lane) return;
+    sel.disabled = true;
+    try {
+      const patch = movePatch(L.to, etDay(new Date()), new Date().toISOString());
+      const res = await sb.from('prospects').update(patch).eq('id', r.id).select(COLS).single();
+      if (res.error) throw res.error;
+      touch(r, res.data); render(); toast('Moved to “' + L.t + '”.');
+    } catch (e) { toast('Not moved. ' + errText(e), true); render(); }
+  }
+  let linkT = 0, linkSeq = 0;
+  async function linkSearch() {
+    const box = document.querySelector('.linkbox'); if (!box || !UI.link) return;
+    const res = box.querySelector('.lres'), q = UI.link.q.trim(), seq = ++linkSeq;
+    if (q.length < 2) { res.innerHTML = '<p class="empty">Type at least 2 characters of a name, address or account number.</p>'; return; }
+    const toks = custTokens(q);
+    if (!toks.length) { res.innerHTML = '<p class="empty">Type a name, address or account number.</p>'; return; }
+    res.innerHTML = '<p class="empty">Searching…</p>';
+    let qb = sb.from('v_customer_360').select('id,account_no,name,address,city,status,route_no,tech_name');
+    toks.forEach(t => { qb = qb.or('name.ilike.' + t + ',address.ilike.' + t + ',account_no.ilike.' + t); });
+    const r = await qb.order('name').limit(20);
+    if (seq !== linkSeq) return;
+    const out = document.querySelector('.linkbox .lres'); if (!out) return;
+    if (r.error) { out.innerHTML = '<p class="empty err">' + esc(errText(r.error)) + '</p>'; return; }
+    UI.link.results = r.data || [];
+    if (!UI.link.results.length) { out.innerHTML = '<p class="empty">No customer matches. Try the last name or the street.</p>'; return; }
+    out.innerHTML = UI.link.results.map((c, i) => '<button type="button" class="lpick" data-i="' + i + '"><b>' + esc(c.name || '(no name)') + '</b>' + (c.account_no ? ' #' + esc(c.account_no) : '') + ' <i>' + esc(c.status || '') + '</i><br><span>' + esc([c.address, c.city].filter(Boolean).join(', ') || 'no address on file') + (c.route_no != null ? ' · Route ' + esc(c.route_no) + (c.tech_name ? ' ' + esc(c.tech_name) : '') : '') + '</span></button>').join('');
+  }
+  async function pickCustomer(r, c, btn) {
+    btn.disabled = true;
+    try {
+      const now = new Date().toISOString();
+      const res = await sb.from('prospects').update({ customer_id: c.id, updated_at: now }).eq('id', r.id).select('id,customer_id,updated_at').single();
+      if (res.error) throw res.error;
+      CUST[c.id] = c; touch(r, res.data); UI.link = null; render(); toast('Linked to ' + (c.name || 'customer') + (c.account_no ? ' #' + c.account_no : '') + '.');
+    } catch (e) { btn.disabled = false; toast('Not linked. ' + errText(e), true); }
+  }
+
+  /* ---------- events ---------- */
+  const main = $('main');
+  main.addEventListener('click', e => {
+    if (e.target.closest('#togOlder')) { UI.older = !UI.older; render(); return; }
+    const cp = e.target.closest('.cp');
+    if (cp) {
+      const v = cp.dataset.copy;
+      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('Copied ' + v), () => toast('Could not copy. Select the text instead.', true));
+      return;
+    }
+    const c = e.target.closest('.card'); if (!c) return;
+    const r = byId(c.dataset.id); if (!r) return;
+    const form = c.querySelector('.nform');
+    if (e.target.closest('.pen')) { UI.noteOpen = form.hidden ? r.id : null; form.hidden = !form.hidden; if (!form.hidden) form.querySelector('textarea').focus(); }
+    else if (e.target.closest('.cancel')) { delete UI.drafts[r.id]; UI.noteOpen = null; form.hidden = true; form.querySelector('textarea').value = ''; }
+    else if (e.target.closest('.save')) { const v = form.querySelector('textarea').value.trim(); if (v) addNote(r, v, e.target.closest('.save')); }
+    else if (e.target.closest('.linkbtn')) { UI.link = { id: r.id, q: String(r.name || '').replace(/,/g, ' ').trim(), results: [] }; render(); const q = document.querySelector('.linkbox .lq'); if (q) { q.focus(); q.select(); } }
+    else if (e.target.closest('.lclose')) { UI.link = null; render(); }
+    else if (e.target.closest('.lpick')) { const b = e.target.closest('.lpick'), cu = UI.link && UI.link.results[+b.dataset.i]; if (cu) pickCustomer(r, cu, b); }
+  });
+  main.addEventListener('input', e => {
+    if (e.target.classList.contains('lq') && UI.link) { UI.link.q = e.target.value; clearTimeout(linkT); linkT = setTimeout(linkSearch, 350); }
+    else if (e.target.tagName === 'TEXTAREA') { const c = e.target.closest('.card'); if (c) UI.drafts[c.dataset.id] = e.target.value; }
+  });
+  main.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA' && (e.ctrlKey || e.metaKey) && e.key === 'Enter') e.target.closest('.card').querySelector('.save').click();
+    if (e.target.tagName === 'TEXTAREA' && e.key === 'Escape') e.target.closest('.card').querySelector('.cancel').click();
+  });
+  main.addEventListener('change', e => {
+    if (!e.target.classList.contains('mv')) return;
+    const r = byId(e.target.closest('.card').dataset.id); if (r) moveTo(e.target, r, parseInt(e.target.value, 10));
+  });
+  $('sum').addEventListener('click', e => { if (e.target.closest('#togLost')) { UI.lost = !UI.lost; render(); } });
+  $('refBtn').addEventListener('click', () => {
+    const dirty = Object.values(UI.drafts).some(v => v && v.trim());
+    if (dirty || UI.link) { toast('Finish or cancel what you are editing, then refresh.', true); return; }
+    load();
+  });
+  const addBox = $('addBox'), addForm = $('addForm');
+  $('addBtn').addEventListener('click', () => { addBox.hidden = !addBox.hidden; if (!addBox.hidden) addForm.elements.name.focus(); });
+  $('addCancel').addEventListener('click', () => { addBox.hidden = true; addForm.reset(); $('addMsg').textContent = ''; $('addMsg').className = 'msg'; });
+  addForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const el = addForm.elements, msg = $('addMsg'); msg.className = 'msg';
+    const f = { name: el.name.value.trim(), email: el.email.value.trim(), phone: el.phone.value.trim(), address: el.address.value.trim(), request: el.request.value.trim(), stage: el.stage.value };
+    if (!['needs_reply', 'agreement_sent', 'signed'].includes(f.stage)) f.stage = 'needs_reply';
+    if (!f.name && !f.email && !f.phone) { msg.className = 'msg err'; msg.textContent = 'Give at least a name, an email or a phone.'; return; }
+    const dup = f.email && ROWS.find(r => r.email && r.email.toLowerCase() === f.email.toLowerCase() && r.stage !== 'lost');
+    if (dup && addForm.dataset.dupOk !== f.email.toLowerCase()) { addForm.dataset.dupOk = f.email.toLowerCase(); msg.className = 'msg err'; msg.textContent = 'There is already a card with this email (' + (dup.name || dup.email) + '). Press Add again to add another anyway.'; return; }
+    const today = etDay(new Date()), nowIso = new Date().toISOString();
+    const row = { name: f.name || null, email: f.email || null, phone: f.phone || null, address: f.address || null, request: f.request || null, stage: f.stage, source: 'manual', last_contact_at: today, updated_at: nowIso };
+    if (f.stage === 'agreement_sent') row.agreement_sent_at = today;
+    if (f.stage === 'signed') row.signed_at = today;
+    $('addSave').disabled = true; msg.textContent = 'Saving…';
+    try {
+      const res = await sb.from('prospects').insert(row).select(COLS).single();
+      if (res.error) throw res.error;
+      ROWS.push(res.data); touch(res.data, {}); LATEST = LATEST && LATEST > res.data.updated_at ? LATEST : res.data.updated_at;
+      addForm.reset(); delete addForm.dataset.dupOk; addBox.hidden = true; msg.textContent = '';
+      if (res.data.email) loadExtras().then(render); else render();
+      toast('Added ' + (res.data.name || res.data.email || 'prospect') + '.');
+    } catch (err) { msg.className = 'msg err'; msg.textContent = 'Not saved. ' + errText(err); }
+    $('addSave').disabled = false;
+  });
+
+  await load();
+})();
+</script>
+</body>
+</html>
