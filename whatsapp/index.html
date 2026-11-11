@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Pool WhatsApp Board</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="whatsapp.css">
+</head>
+<body>
+<header class="pg">
+  <div class="wr">
+    <div class="top"><h1>WhatsApp Board</h1><span class="hsub" id="hsub">Technician reports from the route group chats</span></div>
+  </div>
+</header>
+<main class="wr">
+  <div class="tools">
+    <button type="button" class="btn o sm" id="allEn" aria-pressed="false">Translate all to English</button>
+    <button type="button" class="btn o sm" id="hideDone" aria-pressed="false">Hide handled</button>
+    <select id="grp" aria-label="Filter by group" hidden></select>
+    <span class="live" id="live" role="status">Loading…</span>
+  </div>
+  <div id="board" aria-live="polite"><p class="sub">Loading…</p></div>
+  <footer class="pg">
+    Shows the last 60 days of reports. Nothing here is sorted or decided for you: Handled, the pool and CRM tasks are all your choices, and they are shared with the whole office.
+    A thumbs-up in WhatsApp only makes a report start as Handled. Photos and videos are not on this page yet: they still live in the Claude WhatsApp Chalkboard, so each one shows as a small label only until they are stored in Supabase Storage.
+  </footer>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../shared/drpool.js"></script>
+<script>
+(async function () {
+'use strict';
+const me = await DrPool.requireLogin({ office: true });
+if (!me) return;
+DrPool.topBar('whatsapp');
+const sb = DrPool.sb;
+const $ = (s, el = document) => el.querySelector(s);
+const board = $('#board');
+
+/* ---------- helpers ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ET = 'America/New_York';
+const fDay = new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric' });
+const fISO = new Intl.DateTimeFormat('en-CA', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' });
+const fWd = new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short' });
+const fAt = new Intl.DateTimeFormat('en-US', { timeZone: ET, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const dayLabel = ts => fDay.format(new Date(ts));
+const dayIso = ts => fISO.format(new Date(ts));
+const dayCode = ts => fWd.format(new Date(ts)).slice(0, 3).toLowerCase();   // mon..sun, as in route_stops.day
+const sundayOf = iso => { const p = iso.split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); };
+const TASK_TYPES = { visit: 'Site visit', call: 'Return call', po: 'Make PO', est: 'Send estimate', appr: 'Get approval', inv: 'Send invoice', pay: 'Check payment', other: 'Other', close: 'Close loop' };   // same keys as crm/crm.js
+const PRI = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
+const dueISO = v => v ? new Date(v + 'T17:00').toISOString() : null;   // same as the CRM
+const addrOf = c => c ? [c.address, c.city].filter(Boolean).join(', ') : '';
+const errMsg = e => {
+  const m = (e && (e.message || e.details)) || String(e);
+  const code = e && e.code;
+  if (/row-level security|permission denied/i.test(m) || code === '42501') return "You don't have permission to do that.";
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Could not reach the server. Check your connection.';
+  if (/JWT|expired/i.test(m)) return 'Your sign-in expired. Reload the page and sign in again.';
+  return m;
+};
+async function q(p) { const { data, error } = await p; if (error) throw error; return data; }
+let toastT;
+function toast(text) { const t = $('#toast'); clearTimeout(toastT); t.textContent = text; t.classList.add('on'); toastT = setTimeout(() => t.classList.remove('on'), 4500); }
+function setLive(txt, cls) { const l = $('#live'); l.textContent = txt; l.className = 'live ' + (cls || ''); }
+
+/* Media: each item in wa_messages.media is {kind, path, saved}. The files are not in Supabase yet, so nothing is linked.
+   When the owner stores them in Supabase Storage, return the URL here (for example from sb.storage) and the chip becomes a link. */
+function mediaUrl(item) { return null; }
+function mediaChips(list) {
+  if (!Array.isArray(list) || !list.length) return '';
+  return `<div class="media">` + list.map(x => {
+    const kind = x && x.kind === 'video' ? 'video' : 'photo';
+    const saved = !(x && x.saved === false);
+    const url = saved ? mediaUrl(x) : null;
+    const label = kind + (saved ? '' : ' not saved');
+    return url ? `<a class="mchip" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`
+      : `<span class="mchip${saved ? '' : ' miss'}"${saved ? ' title="The file is not viewable on this page yet"' : ''}>${esc(label)}</span>`;
+  }).join('') + `</div>`;
+}
+
+/* Text for "Send with a note" (WhatsApp share) and for the CRM task note. */
+function composeMessage(th, note) {
+  const lines = [];
+  if (note) lines.push(note, '');
+  lines.push(`${th.group} · ${dayLabel(th.ts)}${th.msgs[0] ? ', ' + th.msgs[0].time : ''}`);
+  if (th.customer) lines.push('Pool: ' + th.customer.name + (addrOf(th.customer) ? ', ' + addrOf(th.customer) : ''));
+  th.msgs.forEach(m => {
+    const parts = [m.name + ' ' + m.time + ':'];
+    if (m.text) parts.push('"' + m.text + '"');
+    if (m.en && m.en !== m.text) parts.push('(English: ' + m.en + ')');
+    const p = m.media.filter(x => x.kind !== 'video').length, v = m.media.length - p, bits = [];
+    if (p) bits.push(p + (p > 1 ? ' photos' : ' photo'));
+    if (v) bits.push(v + (v > 1 ? ' videos' : ' video'));
+    if (bits.length) parts.push('[' + bits.join(', ') + ' in the group]');
+    lines.push(parts.join(' '));
+  });
+  return lines.join('\n');
+}
+function crmNote(th) {
+  const lines = [`From WhatsApp ${th.group}, ${dayLabel(th.ts)}${th.msgs[0] ? ' ' + th.msgs[0].time : ''}.`];
+  th.msgs.forEach(m => {
+    const hasEn = m.en && m.en !== m.text;
+    const body = hasEn ? m.en : m.text;
+    const n = m.media.length;
+    const bits = n ? [n + (n > 1 ? ' photos/videos' : (m.media[0].kind === 'video' ? ' video' : ' photo')) + ' in the group'] : [];
+    if (!body && !bits.length) return;
+    let l = m.name + ' ' + m.time + ': ' + (body || '') + (bits.length ? (body ? ' ' : '') + '[' + bits.join(', ') + ']' : '');
+    if (hasEn && m.text) l += '\n  Original: ' + m.text;
+    lines.push(l);
+  });
+  return lines.join('\n');
+}
+
+/* ---------- data ---------- */
+let threads = [], STAFF = [], allEn = false, hideDone = false, groupFilter = '';
+const PICK = new Map();            // customer id -> {id,name,account_no,address,city} for buttons in pick lists
+const stopCache = new Map();       // 'route|day' -> rows
+const T_SEL = 'id,group_name,route_no,technician_id,started_at,customer_id,thumbs,done,done_by,done_at,task_id,'
+  + 'tech:technicians!wa_threads_technician_id_fkey(name),'
+  + 'customer:customers!wa_threads_customer_id_fkey(id,name,account_no,address,city),'
+  + 'task:tasks!wa_threads_task_id_fkey(id,assignee,done)';
+function mapThread(r, msgs) {
+  return { id: r.id, group: r.group_name || 'WhatsApp', route: r.route_no, tech: r.tech && r.tech.name, ts: Date.parse(r.started_at),
+    thumbs: !!r.thumbs, done: !!r.done, doneBy: r.done_by, doneAt: r.done_at, customer: r.customer || null,
+    task: r.task || null, taskId: r.task_id,
+    msgs: (msgs || []).map(m => ({ who: m.who || 'other', name: m.sender_name || '', time: m.time_label || '', text: m.body || '', en: m.body_en || '', replyTo: m.reply_to,
+      media: Array.isArray(m.media) ? m.media.filter(x => x && typeof x === 'object') : [] })) };
+}
+async function loadAll() {
+  const since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const rows = await q(sb.from('wa_threads').select(T_SEL).gte('started_at', since).order('started_at', { ascending: false }).limit(400));
+  const byThread = new Map();
+  for (let i = 0; i < rows.length; i += 60) {
+    const ids = rows.slice(i, i + 60).map(r => r.id);
+    const ms = await q(sb.from('wa_messages').select('thread_id,seq,who,sender_name,time_label,body,body_en,reply_to,media').in('thread_id', ids).order('seq'));
+    ms.forEach(m => { if (!byThread.has(m.thread_id)) byThread.set(m.thread_id, []); byThread.get(m.thread_id).push(m); });
+  }
+  threads = rows.map(r => mapThread(r, byThread.get(r.id)));
+}
+async function loadStaff() {
+  try {
+    const rows = await q(sb.from('staff').select('id,display_name').eq('active', true).order('display_name'));
+    STAFF = rows;
+  } catch (e) { STAFF = []; }
+}
+const staffId = name => (STAFF.find(s => s.display_name === name) || {}).id || null;
+
+/* ---------- render ---------- */
+function cardHtml(th) {
+  const poolLine = th.customer
+    ? `<div class="pool">Pool: <b>${esc(th.customer.name)}</b>${th.customer.account_no ? ` <span class="sub">#${esc(th.customer.account_no)}</span>` : ''}${addrOf(th.customer) ? `<div class="sub">${esc(addrOf(th.customer))}</div>` : ''}</div>` : '';
+  const crmLine = th.taskId ? `<div class="incrm">In CRM${th.task ? ' · assigned to ' + esc(th.task.assignee || 'Office') + (th.task.done ? ' · done' : '') : ''}</div>` : '';
+  const msgs = th.msgs.map(m => {
+    const hasEn = m.text && m.en && m.en !== m.text;
+    return `<div class="msg ${esc(m.who)}"><div class="who"><b>${esc(m.name)}</b><span>${esc(m.time)}</span></div>`
+      + (m.replyTo ? `<div class="quote">Replying to: ${esc(m.replyTo)}</div>` : '')
+      + mediaChips(m.media)
+      + (m.text ? `<div class="tx">${esc(m.text)}</div>` : '')
+      + (hasEn ? `<div class="en">${esc(m.en)}</div>` : '') + `</div>`;
+  }).join('');
+  const hasEn = th.msgs.some(m => m.text && m.en && m.en !== m.text);
+  const doneNote = th.done && th.doneBy ? `<span class="sub">Handled by ${esc(th.doneBy)}${th.doneAt ? ', ' + esc(fAt.format(new Date(th.doneAt))) : ''}</span>` : '';
+  return `<article class="card${th.done ? ' done' : ''}${allEn ? ' show-en' : ''}" data-id="${esc(th.id)}">
+    <div class="ch"><span class="g">${esc(th.group)}<span class="sub">${th.route ? ' · Route ' + esc(th.route) : ''}${th.tech ? ' · ' + esc(th.tech) : ''}</span></span>
+      <span class="sub">${th.thumbs ? '👍 in WhatsApp · ' : ''}${esc(dayLabel(th.ts))}${th.msgs[0] ? ' · ' + esc(th.msgs[0].time) : ''}</span></div>
+    ${poolLine}${crmLine}
+    <div class="msgs">${msgs || '<div class="sub">No messages in this report.</div>'}</div>
+    <div class="acts">
+      ${hasEn ? `<button type="button" class="btn o sm" data-a="tr" aria-pressed="${allEn}">${allEn ? 'Original only' : 'Translate'}</button>` : ''}
+      <button type="button" class="btn o sm" data-a="send" aria-expanded="false">Send with a note</button>
+      <button type="button" class="btn o sm" data-a="pool" aria-expanded="false">${th.customer ? 'Change pool' : 'Which pool?'}</button>
+      <button type="button" class="btn o sm" data-a="crm" aria-expanded="false">${th.taskId ? 'Update CRM task' : 'Send to CRM'}</button>
+      <span class="sp"></span>${doneNote}
+      <label class="ck"><input type="checkbox" data-a="done"${th.done ? ' checked' : ''}> Handled</label>
+    </div>
+    <div class="panel" data-p="send" hidden>
+      <label>Your note<textarea data-r="note" placeholder="Add a line for whoever gets this, like “Can you call him?”"></textarea></label>
+      <div class="acts" style="border:0;padding:0"><a class="btn sm" data-r="wa" target="_blank" rel="noopener">Open in WhatsApp</a><button type="button" class="btn o sm" data-a="copy">Copy message</button></div>
+      <span class="sub">Pick the person in WhatsApp. Photos and video do not travel with this, so attach them there.</span>
+    </div>
+    <div class="panel" data-p="pool" hidden>
+      <div class="sub" data-r="pnote"></div>
+      <div class="pl" data-r="stops"></div>
+      <input type="search" data-r="sq" placeholder="Search active customers by name, address or account number" aria-label="Search active customers">
+      <div class="pl" data-r="res"></div>
+      <div><button type="button" class="btn o sm" data-a="clearpool"${th.customer ? '' : ' hidden'}>Clear pool</button></div>
+    </div>
+    <div class="panel" data-p="crm" hidden></div>
+  </article>`;
+}
+function crmPanelHtml(th) {
+  const names = [...STAFF.map(s => s.display_name).filter(n => n !== 'Office'), 'Office'];
+  const cur = th.task && th.task.assignee ? th.task.assignee : 'Office';
+  return `<div class="fg">
+      <label>Assign to<select data-r="who">${names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <label>Step<select data-r="type">${Object.keys(TASK_TYPES).map(k => `<option value="${k}"${k === 'visit' ? ' selected' : ''}>${esc(TASK_TYPES[k])}</option>`).join('')}</select></label>
+      <label>Priority<select data-r="pri">${Object.keys(PRI).map(k => `<option value="${k}"${k === 'normal' ? ' selected' : ''}>${PRI[k]}</option>`).join('')}</select></label>
+      <label>Due (optional)<input type="date" data-r="due"></label>
+      <label class="w2">Note<textarea data-r="cnote" rows="5">${esc(crmNote(th))}</textarea></label>
+    </div>
+    <div class="acts" style="border:0;padding:0"><button type="button" class="btn sm" data-a="mk">${th.taskId ? 'Update CRM task' : 'Create CRM task'}</button></div>
+    <span class="sub">${th.customer ? 'Customer: ' + esc(th.customer.name) + '.' : 'No pool picked, so the task will have no customer.'} ${th.taskId ? 'Sending again updates the same task and never reopens it if it is done.' : 'Creates a team task in the CRM.'}</span>`;
+}
+function render() {
+  const groups = [...new Set(threads.map(t => t.group))].sort();
+  const sel = $('#grp');
+  sel.hidden = groups.length < 2;
+  if (!groups.includes(groupFilter)) groupFilter = '';
+  if (!sel.hidden) sel.innerHTML = `<option value="">All groups (${groups.length})</option>` + groups.map(g => `<option${g === groupFilter ? ' selected' : ''}>${esc(g)}</option>`).join('');
+  const list = threads.filter(t => !groupFilter || t.group === groupFilter).sort((a, b) => b.ts - a.ts);
+  if (!threads.length) { board.innerHTML = '<div class="empty"><b>No reports in the last 60 days.</b>New technician messages show up here once they are loaded into the brain.</div>'; return; }
+  if (!list.length) { board.innerHTML = '<div class="empty"><b>Nothing in this group.</b>Pick another group above.</div>'; return; }
+  let out = '', last = null;
+  list.forEach(th => {
+    const d = dayIso(th.ts);
+    if (d !== last) { out += `<div class="day"><h2>${esc(dayLabel(th.ts))}</h2></div>`; last = d; }
+    out += cardHtml(th);
+  });
+  board.innerHTML = out;
+  applyHide();
+  setLive(`${list.length} report${list.length === 1 ? '' : 's'}, ${list.reduce((n, t) => n + t.msgs.length, 0)} messages`, 'on');
+}
+function applyHide() { board.querySelectorAll('.card').forEach(c => { c.hidden = hideDone && c.classList.contains('done'); }); }
+function swapCard(th) {
+  const old = board.querySelector(`.card[data-id="${CSS.escape(th.id)}"]`); if (!old) return;
+  const t = document.createElement('div'); t.innerHTML = cardHtml(th); old.replaceWith(t.firstElementChild); applyHide();
+}
+
+/* ---------- writes ---------- */
+async function saveDone(th, val) {
+  const patch = val ? { done: true, done_by: me.name, done_at: new Date().toISOString() } : { done: false, done_by: null, done_at: null };
+  const r = await q(sb.from('wa_threads').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', th.id).select('id'));
+  if (!r || !r.length) throw new Error("You don't have permission to do that.");
+  th.done = val; th.doneBy = patch.done_by; th.doneAt = patch.done_at;
+}
+async function savePool(th, c) {
+  const r = await q(sb.from('wa_threads').update({ customer_id: c ? c.id : null, updated_at: new Date().toISOString() }).eq('id', th.id).select('id'));
+  if (!r || !r.length) throw new Error("You don't have permission to do that.");
+  th.customer = c ? { id: c.id, name: c.name, account_no: c.account_no || null, address: c.address || null, city: c.city || null } : null;
+}
+/* Creates or updates the ONE task for this thread (route_key 'wa:<thread id>'). Never sends `done`, so a finished task stays finished. */
+async function sendToCrm(th, f) {
+  const rk = 'wa:' + th.id;
+  const fields = { type: f.type, assignee: f.who, assignee_staff_id: f.who === 'Office' ? null : staffId(f.who), priority: f.pri, due_at: dueISO(f.due), note: f.note || null };
+  if (f.who !== 'Office' && !fields.assignee_staff_id) throw new Error('That person is not in the staff list. Reload the page and try again.');
+  if (th.customer) fields.customer_id = th.customer.id;
+  const existing = await q(sb.from('tasks').select('id,done').eq('workspace', 'team').eq('route_key', rk).maybeSingle());
+  let task;
+  if (existing) {
+    const r = await q(sb.from('tasks').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', existing.id).select('id,assignee,done'));
+    if (!r || !r.length) throw new Error("You don't have permission to change that task.");
+    task = r[0];
+  } else {
+    const row = { ...fields, workspace: 'team', source: 'whatsapp', source_ref: th.id, route_key: rk, created_by: me.name, tags: ['whatsapp'], messages: [] };
+    try { task = await q(sb.from('tasks').upsert(row, { onConflict: 'route_key' }).select('id,assignee,done').single()); }
+    catch (e) { if (/row-level security|42501/i.test((e.message || '') + (e.code || ''))) throw new Error('A CRM task for this report already exists but belongs to someone else, so you cannot update it.'); throw e; }
+  }
+  const r2 = await q(sb.from('wa_threads').update({ task_id: task.id, updated_at: new Date().toISOString() }).eq('id', th.id).select('id'));
+  if (!r2 || !r2.length) throw new Error('The task was saved but could not be linked to this report. Send it again to retry.');
+  th.taskId = task.id; th.task = { id: task.id, assignee: task.assignee, done: task.done };
+  return task;
+}
+
+/* ---------- pool picker ---------- */
+async function loadStops(route, day) {
+  const k = route + '|' + day;
+  if (stopCache.has(k)) return stopCache.get(k);
+  const rows = await q(sb.from('v_schedule_current').select('week_of,slot,customer_id,label,customer_name,address,city,account_no,customer_status').eq('route_no', route).eq('day', day).order('slot'));
+  stopCache.set(k, rows); return rows;
+}
+const likeEsc = s => String(s).replace(/[*]/g, ' ').replace(/[\\%_]/g, c => '\\' + c);   // % and _ and \ match literally; * would be a PostgREST wildcard
+async function searchCustomers(term) {
+  const pat = '%' + likeEsc(term.trim()) + '%';
+  const one = col => q(sb.from('customers').select('id,name,account_no,address,city').eq('status', 'active').ilike(col, pat).order('name').limit(12));
+  const res = await Promise.all([one('name'), one('address'), one('account_no')]);
+  const seen = new Map(); res.flat().forEach(c => seen.set(c.id, c));
+  return [...seen.values()].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 15);
+}
+function pickBtn(c, main, sub, cur) {
+  PICK.set(c.id, c);
+  return `<button type="button" class="pk" data-a="pick" data-cid="${esc(c.id)}"${cur === c.id ? ' aria-pressed="true"' : ''}><b>${esc(main)}</b><span>${esc(sub)}</span></button>`;
+}
+async function openPool(card, th) {
+  const note = $('[data-r="pnote"]', card), list = $('[data-r="stops"]', card);
+  if (card.dataset.stops) return;
+  if (!th.route) { note.textContent = 'This report has no route, so use the search below.'; card.dataset.stops = '1'; return; }
+  const dc = dayCode(th.ts);
+  note.textContent = `Loading Route ${th.route} stops for ${dc.toUpperCase()}…`;
+  try {
+    const rows = await loadStops(th.route, dc);
+    card.dataset.stops = '1';
+    if (!rows.length) { note.textContent = `No Route ${th.route} stops on ${dc.toUpperCase()} in the loaded schedule. Use the search below.`; return; }
+    const wk = rows[0].week_of, msgWk = sundayOf(dayIso(th.ts));
+    note.textContent = `Route ${th.route} stops on ${dc.toUpperCase()} from the schedule week of ${wk}.` + (wk !== msgWk ? ` This report is from the week of ${msgWk}, which is not loaded, so confirm the pool.` : '');
+    list.innerHTML = rows.map(r => {
+      const nm = r.customer_name || r.label || '(no name)', sub = [addrOf(r), r.customer_status && r.customer_status !== 'active' ? r.customer_status : ''].filter(Boolean).join(' · ');
+      if (!r.customer_id) return `<button type="button" class="pk" disabled><b>#${esc(r.slot)}  ${esc(nm)}</b><span>${esc(sub || 'Not linked to a customer')}</span></button>`;
+      return pickBtn({ id: r.customer_id, name: nm, account_no: r.account_no, address: r.address, city: r.city }, `#${r.slot}  ${nm}`, sub, th.customer && th.customer.id);
+    }).join('');
+  } catch (e) { note.textContent = 'Could not load the schedule. ' + errMsg(e); }
+}
+
+/* ---------- events ---------- */
+const byId = id => threads.find(t => t.id === id);
+board.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-a]'); if (!b || b.tagName === 'INPUT') return;
+  const card = b.closest('.card'); const th = card && byId(card.dataset.id); if (!th) return;
+  const a = b.dataset.a;
+  const panel = n => $(`[data-p="${n}"]`, card);
+  const toggle = (n, btn) => { const p = panel(n); p.hidden = !p.hidden; btn.setAttribute('aria-expanded', String(!p.hidden)); return !p.hidden; };
+  if (a === 'tr') { const on = card.classList.toggle('show-en'); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? 'Original only' : 'Translate'; }
+  else if (a === 'send') { if (toggle('send', b)) { const ta = $('[data-r="note"]', card); upd(); ta.oninput = upd; ta.focus(); }
+    function upd() { $('[data-r="wa"]', card).href = 'https://wa.me/?text=' + encodeURIComponent(composeMessage(th, $('[data-r="note"]', card).value.trim())); } }
+  else if (a === 'copy') {
+    const ta = $('[data-r="note"]', card), txt = composeMessage(th, ta.value.trim());
+    try { await navigator.clipboard.writeText(txt); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy message'; }, 1600); }
+    catch (e) { ta.value = txt; ta.select(); b.textContent = 'Select and copy'; }
+  }
+  else if (a === 'pool') { if (toggle('pool', b)) openPool(card, th); }
+  else if (a === 'crm') { const p = panel('crm'); if (p.hidden) p.innerHTML = crmPanelHtml(th); toggle('crm', b); }
+  else if (a === 'pick' || a === 'clearpool') {
+    const c = a === 'pick' ? PICK.get(b.dataset.cid) : null;
+    b.disabled = true;
+    try { await savePool(th, c); swapCard(th); toast(c ? 'Pool saved: ' + c.name : 'Pool cleared.'); }
+    catch (e) { b.disabled = false; toast('Could not save the pool. ' + errMsg(e)); }
+  }
+  else if (a === 'mk') {
+    const g = n => $(`[data-r="${n}"]`, card).value;
+    b.disabled = true; const label = b.textContent; b.textContent = 'Saving…';
+    try {
+      const task = await sendToCrm(th, { who: g('who'), type: g('type'), pri: g('pri'), due: g('due'), note: g('cnote').trim() });
+      swapCard(th);
+      toast(task.done ? 'Task updated. It was already done, so it stays done.' : 'Saved in the CRM, assigned to ' + (task.assignee || 'Office') + '.');
+    } catch (e) { b.disabled = false; b.textContent = label; toast('Could not save the CRM task. ' + errMsg(e)); }
+  }
+});
+board.addEventListener('change', async ev => {
+  const cb = ev.target.closest('[data-a="done"]'); if (!cb) return;
+  const card = cb.closest('.card'); const th = byId(card.dataset.id); if (!th) return;
+  const val = cb.checked; cb.disabled = true;
+  try { await saveDone(th, val); swapCard(th); }
+  catch (e) { cb.checked = !val; cb.disabled = false; toast('Could not save Handled; nothing changed. ' + errMsg(e)); }
+});
+let sT;
+board.addEventListener('input', ev => {
+  const inp = ev.target.closest('[data-r="sq"]'); if (!inp) return;
+  const card = inp.closest('.card'); const th = byId(card.dataset.id); const res = $('[data-r="res"]', card);
+  clearTimeout(sT); const v = inp.value.trim();
+  if (v.length < 2) { res.innerHTML = ''; return; }
+  sT = setTimeout(async () => {
+    try {
+      const rows = await searchCustomers(v);
+      if (inp.value.trim() !== v) return;
+      res.innerHTML = rows.length ? rows.map(c => pickBtn(c, c.name, [addrOf(c), c.account_no ? '#' + c.account_no : ''].filter(Boolean).join(' · '), th.customer && th.customer.id)).join('')
+        : '<div class="sub" style="padding:8px 10px">No active customer matches.</div>';
+    } catch (e) { res.innerHTML = `<div class="sub err" style="padding:8px 10px">Search failed. ${esc(errMsg(e))}</div>`; }
+  }, 300);
+});
+$('#grp').addEventListener('change', e => { groupFilter = e.target.value; render(); });
+$('#hideDone').addEventListener('click', e => { hideDone = !hideDone; e.currentTarget.setAttribute('aria-pressed', String(hideDone)); applyHide(); });
+$('#allEn').addEventListener('click', e => {
+  allEn = !allEn; e.currentTarget.setAttribute('aria-pressed', String(allEn)); e.currentTarget.textContent = allEn ? 'Show originals only' : 'Translate all to English';
+  board.querySelectorAll('.card').forEach(c => c.classList.toggle('show-en', allEn));
+  board.querySelectorAll('[data-a="tr"]').forEach(b => { b.setAttribute('aria-pressed', String(allEn)); b.textContent = allEn ? 'Original only' : 'Translate'; });
+});
+
+/* ---------- start ---------- */
+async function start() {
+  setLive('Loading…');
+  try {
+    await Promise.all([loadAll(), loadStaff()]);
+    render();
+  } catch (e) {
+    const perm = errMsg(e) === "You don't have permission to do that.";
+    board.innerHTML = `<div class="empty bad"><b>${perm ? 'You do not have access to this page.' : 'Could not load the WhatsApp reports.'}</b>${esc(perm ? 'Only office staff can open the WhatsApp board.' : errMsg(e))}<div style="margin-top:10px"><button type="button" class="btn o sm" id="retry">Try again</button></div></div>`;
+    setLive(navigator.onLine === false ? 'Offline' : 'Not loaded', 'bad');
+    const r = $('#retry'); if (r) r.onclick = start;
+  }
+}
+window.addEventListener('online', () => { if (!threads.length) start(); });
+await start();
+})();
+</script>
+</body>
+</html>
