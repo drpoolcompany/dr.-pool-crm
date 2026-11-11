@@ -61,6 +61,8 @@ function home(me) {
   <div class="apps">
     <a href="crm/">CRM<span>Your jobs and tasks${me.office ? ', or the whole office' : ''}</span></a>
     ${me.office ? '<a href="board/">Chalkboard<span>The shared inbox to-do board</span></a>' : ''}
+    ${me.office ? '<a href="whatsapp/">WhatsApp board<span>Tech reports from the route chats</span></a>' : ''}
+    ${me.office ? '<a href="prospects/">Prospects<span>New customers waiting on us</span></a>' : ''}
   </div>
   <button class="link" id="out" type="button">Sign out</button>`;
   document.getElementById('nm').textContent = me.name;
