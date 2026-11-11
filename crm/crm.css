@@ -180,3 +180,5 @@ body.ovl-on{overflow:hidden}
 .ctx{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--mist);border-radius:10px;padding:6px 10px;font-size:14px}
 .ctx b{min-width:0;overflow-wrap:anywhere;flex:1}
 .ctx .x{background:none;border:0;color:var(--sub);font-size:20px;cursor:pointer;min-width:36px;min-height:36px}
+.tag.src{border-style:solid;border-color:var(--lk);color:var(--lk)}
+.sub.bill{margin:8px 0 0}

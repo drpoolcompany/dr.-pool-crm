@@ -33,6 +33,8 @@ const addrOf = c => c ? [c.address, c.city].filter(Boolean).join(', ') : '';
 const mapUrl = c => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addrOf(c) + (c && c.city ? ', FL' : ''));
 const mapLink = c => addrOf(c) ? `<a class="addr" href="${esc(mapUrl(c))}" target="_blank" rel="noopener">${esc(addrOf(c))}</a>` : '';
 const priB = p => p && p !== 'normal' ? `<span class="b p-${esc(p)}">${esc(PRI[p] || p)}</span>` : '';
+const SRC = { whatsapp: 'from WhatsApp', route_planner: 'from Route Planner' };
+const srcB = t => t && SRC[t.source] ? `<span class="tag src">${esc(SRC[t.source])}</span>` : '';
 const isOffice = () => !!me.office;
 const isOwner = () => me.role === 'owner';
 /* Only the owner has a view switch: 'all' = everything, 'mine' = his own + Office. Everyone else sees what the database returns. */
@@ -70,7 +72,7 @@ const whoOpts = cur => assignees().map(n => `<option${n === cur ? ' selected' : 
 
 /* ---------- data access ---------- */
 const CUST_MIN = 'id,name,address,city,account_no,community,status';
-const TASK_SEL = `id,job_id,customer_id,type,assignee,assignee_staff_id,note,done,due_at,done_at,messages,priority,tags,created_by,created_at,
+const TASK_SEL = `id,job_id,customer_id,type,assignee,assignee_staff_id,note,done,due_at,done_at,messages,priority,tags,created_by,created_at,source,
   customer:customers!tasks_customer_id_fkey(${CUST_MIN}),
   job:jobs!tasks_job_id_fkey(id,title,kind,open,priority,customer_id,total,work_done_at,customer:customers!jobs_customer_id_fkey(${CUST_MIN}))`.replace(/\s+/g, '');
 
@@ -192,7 +194,7 @@ function taskCard(t, opts = {}) {
   const m = opts.m || null;
   return `<article class="tk p-${esc(t.priority || 'normal')}${overdue ? ' over' : ''}" data-task="${esc(t.id)}">
   <div style="min-width:0">
-    <div class="ln"><span class="ty">${esc(T[t.type] || t.type)}</span>${t.assignee === 'Office' ? '<span class="b office">Office</span>' : ''}${priB(t.priority)}${j && j.kind === 'renovation' ? '<span class="b reno">Renovation</span>' : ''}${fBadge(m)}</div>
+    <div class="ln"><span class="ty">${esc(T[t.type] || t.type)}</span>${t.assignee === 'Office' ? '<span class="b office">Office</span>' : ''}${priB(t.priority)}${j && j.kind === 'renovation' ? '<span class="b reno">Renovation</span>' : ''}${fBadge(m)}${srcB(t)}</div>
     ${c ? `<div class="ln"><b>${esc(c.name)}</b>${c.account_no ? `<span class="sub">#${esc(c.account_no)}</span>` : ''}</div><div class="ln">${mapLink(c)}</div>` : ''}
     ${j ? `<div class="ln"><a href="#/j/${esc(j.id)}">${esc(j.title)}</a>${j.open ? '' : '<span class="b ok">Job closed</span>'}</div>` : ''}
     ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
@@ -281,6 +283,10 @@ async function viewCustomers() {
 }
 
 async function latestWeek() {
+  try {
+    const w = await q(sb.rpc('brain_current_week'));
+    if (typeof w === 'string' && /^\d{4}-\d{2}-\d{2}/.test(w)) return w.slice(0, 10);
+  } catch (e) { /* fall back to the newest loaded week below */ }
   const r = await q(sb.from('route_stops').select('week_of').order('week_of', { ascending: false }).limit(1));
   return r[0] ? r[0].week_of : null;
 }
@@ -294,6 +300,21 @@ function jobRow(j, showCust) {
     <div class="sub">${open.length ? 'Next: ' + open.slice(0, 3).map(t => esc(T[t.type] || t.type) + ' (' + esc(t.assignee || '?') + ')').join(', ') : 'No open tasks'}</div></div>
     <div class="rt"><span class="b ${j.open ? 'wait' : 'ok'}">${j.open ? 'Open' : 'Closed'}</span><div class="sub">${esc(new Date(j.created_at).toLocaleDateString())}</div></div></a>`;
 }
+const fmtDate = d => new Date(String(d).slice(0, 10) + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+function billLine(v) {
+  if (!v) return '';
+  const bal = v.qb_balance != null ? +v.qb_balance : v.open_amount != null ? +v.open_amount : null;
+  const nInv = +v.open_invoices || 0;
+  const hasBal = bal != null;
+  const hasAuto = v.autopay != null;
+  const hasPaid = v.last_paid_on != null;
+  if (!hasBal && !hasAuto && !hasPaid) return '<p class="sub bill">Billing: no QuickBooks / Biller Genie report loaded yet</p>';
+  const parts = [];
+  parts.push(hasBal ? `Open balance <b>${esc($$(bal))}</b>` + (nInv ? ` (${nInv} open invoice${nInv === 1 ? '' : 's'}${v.oldest_open ? ', oldest ' + esc(fmtDate(v.oldest_open)) : ''})` : '') : 'Open balance not loaded');
+  parts.push(hasAuto ? 'Autopay ' + (v.autopay ? 'yes' : 'no') + (v.autopay && v.bg_payment_method ? ' (' + esc(v.bg_payment_method) + ')' : '') : 'Autopay not loaded');
+  parts.push(hasPaid ? 'Last paid ' + esc(fmtDate(v.last_paid_on)) + (v.last_paid_amount != null ? ' (' + esc($$(v.last_paid_amount)) + ')' : '') : 'No payment on record');
+  return `<p class="sub bill">Billing: ${parts.join(' · ')}</p>`;
+}
 async function viewCustomer(id) {
   const office = isOffice();
   const [c, wk] = await Promise.all([q(sb.from('customers').select('*').eq('id', id).maybeSingle()), latestWeek().catch(() => null)]);
@@ -302,8 +323,9 @@ async function viewCustomer(id) {
   const stops = wk ? q(sb.from('route_stops').select('day,slot,route_no,label,price,service_code,flag,tech:technicians!route_stops_technician_id_fkey(name)').eq('customer_id', id).eq('week_of', wk).order('day')).catch(() => null) : Promise.resolve([]);
   const bills = office ? q(sb.from('billing_months').select('period,amount,service,pool_info').eq('customer_id', id).order('period', { ascending: false }).limit(12)).catch(() => null) : Promise.resolve(null);
   const evs = office ? q(sb.from('account_events').select('kind,period,event_date,amount,service,reason,tech,name').eq('customer_id', id).order('event_date', { ascending: false, nullsFirst: false }).limit(40)).catch(() => null) : Promise.resolve(null);
+  const bill360 = office ? q(sb.from('v_customer_360').select('email,qb_balance,open_invoices,open_amount,oldest_open,autopay,bg_payment_method,last_paid_on,last_paid_amount').eq('id', id).maybeSingle()).catch(() => null) : Promise.resolve(null);
   const calls = q(sb.from('calls').select(CALL_SEL).eq('workspace', WS).eq('customer_id', id).order('created_at', { ascending: false }).limit(20)).catch(() => null);
-  const [J, R, B, E, CL] = await Promise.all([jobs, stops, bills, evs, calls]);
+  const [J, R, B, E, CL, B360] = await Promise.all([jobs, stops, bills, evs, calls, bill360]);
   CUR = { customer_id: c.id, label: c.name, cust: { id: c.id, name: c.name, address: c.address, city: c.city } };
   const kv = [['Account #', c.account_no], ['Service', [c.service_level, c.customer_type === 'commercial' ? 'Commercial' : ''].filter(Boolean).join(' · ')], ['Monthly', office && c.monthly_rate != null ? $$(c.monthly_rate) : ''], ['Pool', c.pool_info], ['Community', [c.community, c.subdivision].filter(Boolean).join(' · ')], ['Phone', c.phone ? `<a href="tel:${esc(c.phone.replace(/[^\d+]/g, ''))}">${esc(c.phone)}</a>` : '', true], ['Email', c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '', true], ['Started', c.start_date ? new Date(c.start_date + 'T12:00').toLocaleDateString() : ''], ['Canceled', c.cancel_date ? new Date(c.cancel_date + 'T12:00').toLocaleDateString() + (c.cancel_reason ? ' · ' + c.cancel_reason : '') : ''], ['Suspended', c.suspend_reason]].filter(x => x[1]);
   const evName = { new: 'New account', cancel: 'Canceled', suspend: 'Suspended', raise: 'Price raise', price_down: 'Price lowered', name_change: 'Name change', transfer: 'Transfer', note: 'Note' };
@@ -313,7 +335,8 @@ async function viewCustomer(id) {
   ${office ? `<div class="row-a"><a class="btn" href="#/new?c=${esc(c.id)}">Start a job</a></div>` : ''}
   ${c.notes ? `<div class="gate"><b>Notes and gate codes</b><br>${esc(c.notes)}</div>` : ''}
   ${kv.length ? `<h3>Details</h3><dl class="kv">${kv.map(([k, v, html]) => `<dt>${k}</dt><dd>${html ? v : esc(v)}</dd>`).join('')}</dl>` : ''}
-  <h3>This week's route${wk ? ` <span class="sub">(week of ${esc(new Date(wk + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' }))})</span>` : ''}</h3>
+  ${office ? billLine(B360) : ''}
+  <h3>This week's route${wk ? ` <span class="sub">(schedule week of ${esc(new Date(wk + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' }))})</span>` : ''}</h3>
   ${R === null ? '<p class="sub">Route could not be loaded.</p>' : R.length ? `<table class="tbl"><tr><th>Day</th><th>Tech</th><th>Route</th><th>Note</th></tr>${R.sort((a, b) => Object.keys(DAYS).indexOf(a.day) - Object.keys(DAYS).indexOf(b.day)).map(s => `<tr><td>${esc(DAYS[s.day] || s.day)}</td><td>${esc(s.tech ? s.tech.name : '')}</td><td>#${esc(s.route_no)} · stop ${esc(s.slot)}</td><td>${esc([s.service_code, s.flag && s.flag.replace('_', ' ')].filter(Boolean).join(' · '))}</td></tr>`).join('')}</table>` : '<p class="sub">Not on this week\'s route.</p>'}
   <h3>Jobs</h3>
   ${J === null ? '<p class="sub">Jobs could not be loaded.</p>' : J.length ? J.map(j => jobRow(j, false)).join('') : `<p class="sub">${office ? 'No team jobs for this account yet.' : 'None of your jobs are on this account.'}</p>`}
@@ -410,7 +433,7 @@ async function viewJob(id) {
   const fol = folderOf(M);
   const step = t => {
     const msgs = Array.isArray(t.messages) ? t.messages : [];
-    return `<div class="st${t.done ? ' d' : ''}" data-task="${esc(t.id)}"><div class="jh"><span class="ty"><b>${esc(T[t.type] || t.type)}</b></span><span class="b">${esc(t.assignee || 'Unassigned')}</span>${priB(t.priority)}
+    return `<div class="st${t.done ? ' d' : ''}" data-task="${esc(t.id)}"><div class="jh"><span class="ty"><b>${esc(T[t.type] || t.type)}</b></span><span class="b">${esc(t.assignee || 'Unassigned')}</span>${priB(t.priority)}${srcB(t)}
       <span class="sub">${t.done ? 'Done ' + (t.done_at ? esc(fmtAt(t.done_at)) : '') : t.due_at ? 'Due ' + esc(fmtDay(t.due_at)) : ''}</span></div>
       ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
       ${(t.tags || []).length ? `<div class="m">${t.tags.map(g => `<span class="tag">${esc(g)}</span>`).join('')}</div>` : ''}
