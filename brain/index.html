@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dr. Pool Brain</title><meta name="robots" content="noindex">
+<style>
+:root{--ink:#06303b;--sub:#4d7480;--bg:#f2f9fa;--card:#fff;--line:#c7e2e6;--hd:#0a5a6b;--ok:#1b8a4b;--warn:#b7791f;--err:#c4383e}
+@media(prefers-color-scheme:dark){:root{--ink:#e1f3f5;--sub:#8db4bd;--bg:#071d24;--card:#0c2831;--line:#1c4551;--ok:#58d68d;--warn:#f0b34a;--err:#ff7a7f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}h1{margin:8px 0 2px}h2{margin:24px 0 8px;font-size:17px}
+.sub{color:var(--sub);font-size:13px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card h3{margin:0 0 4px;font-size:16px;display:flex;justify-content:space-between;gap:8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--sub)}
+.ok{background:var(--ok)}.warn{background:var(--warn)}.err{background:var(--err)}
+.flow{display:grid;gap:8px}.fl{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.fl b{white-space:nowrap}.ar{color:var(--sub)}table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px}
+td,th{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);font-size:14px}.msg{padding:14px;border:1px solid var(--err);border-radius:10px;color:var(--err)}
+button{font:inherit;border:0;border-radius:8px;background:var(--hd);color:#fff;padding:6px 12px;cursor:pointer}
+</style></head><body>
+<main id="app"><h1>Dr. Pool Brain</h1><p class="sub">Loading…</p></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../shared/drpool.js"></script>
+<script>
+(async()=>{
+const me=await DrPool.requireLogin({office:true}); if(!me)return; DrPool.topBar('brain');
+const sb=DrPool.sb, app=document.getElementById('app');
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ago=t=>{if(!t)return 'never';const m=(Date.now()-new Date(t))/60000;if(m<2)return 'just now';if(m<90)return Math.round(m)+' min ago';if(m<2880)return Math.round(m/60)+' h ago';return Math.round(m/1440)+' days ago'};
+const age=t=>t?(Date.now()-new Date(t))/86400000:null;
+async function load(){
+ app.innerHTML='<h1>Dr. Pool Brain</h1><p class="sub">Loading…</p>';
+ try{
+  const [st,tk,wa,pr]=await Promise.all([
+   sb.from('v_brain_status').select('*'),
+   sb.from('tasks').select('id,type,assignee,note,done,source,created_at,created_by').eq('workspace','team').order('created_at',{ascending:false}).limit(200),
+   sb.from('wa_threads').select('id,done,task_id,customer_id,started_at').order('started_at',{ascending:false}).limit(200),
+   sb.from('prospects').select('stage,updated_at')]);
+  for(const r of [st,tk,wa,pr]) if(r.error) throw new Error(r.error.message);
+  const S={};st.data.forEach(r=>S[r.dataset]=r);
+  const tasks=tk.data, threads=wa.data;
+  const bySrc=k=>tasks.filter(t=>t.source===k);
+  const card=(name,desc,rows,last,state,extra)=>`<div class="card"><h3><span><span class="dot ${state}"></span>${esc(name)}</span><span class="sub">${esc(rows)}</span></h3><div class="sub">${esc(desc)}</div><div class="sub">Last change: ${esc(ago(last))}</div>${extra?`<div class="sub">${extra}</div>`:''}</div>`;
+  const st1=(d,stale)=>{const r=S[d];if(!r||!r.rows)return 'err';const a=age(r.last_change);return a!=null&&a>stale?'warn':'ok'};
+  const n=d=>S[d]?Number(S[d].rows).toLocaleString():'0';
+  const openWa=threads.filter(t=>!t.done).length, waTasks=threads.filter(t=>t.task_id).length;
+  const waOpenTasks=bySrc('whatsapp').filter(t=>!t.done).length, rpOpen=bySrc('route_planner').filter(t=>!t.done).length;
+  const qb=['qb_customers','qb_invoices','qb_payments','bg_customers','bg_payments'].reduce((a,d)=>a+Number((S[d]||{}).rows||0),0);
+  const stages={};pr.data.forEach(p=>stages[p.stage]=(stages[p.stage]||0)+1);
+  app.innerHTML=`<h1>Dr. Pool Brain</h1><p class="sub">Live from the shared database · ${new Date().toLocaleTimeString()} · <button id="rf">Refresh</button></p>
+  <h2>Every tool and what it holds</h2><div class="grid">
+  ${card('Customers',"Names, addresses, emails, rates — the base for everything",n('customers'),S.customers&&S.customers.last_change,st1('customers',30))}
+  ${card('Route schedule','Weekly route stops: CRM, Route Planner, Dashboard read this',n('route_stops')+' stops',S.route_stops&&S.route_stops.last_change,st1('route_stops',8),'Only the week of Oct 25 is loaded')}
+  ${card('CRM tasks & jobs','Team workspace — what staff see',n('tasks')+' tasks · '+n('jobs')+' jobs',S.tasks&&S.tasks.last_change,st1('tasks',14))}
+  ${card('WhatsApp board','Tech reports from route chats',n('wa_threads')+' threads',S.wa_threads&&S.wa_threads.last_change,st1('wa_threads',3),openWa+' not handled · '+waTasks+' sent to CRM')}
+  ${card('Email Chalkboard','Inbox to-dos',n('chalkboard_items')+' items',S.chalkboard_items&&S.chalkboard_items.last_change,st1('chalkboard_items',1))}
+  ${card('Prospects','New customers waiting on us',n('prospects')+' prospects',S.prospects&&S.prospects.last_change,st1('prospects',7),Object.entries(stages).map(([k,v])=>esc(k)+': '+v).join(' · '))}
+  ${card('SCP chemical tally','Supplier invoices',n('supplier_invoices')+' invoices',S.supplier_invoices&&S.supplier_invoices.last_change,st1('supplier_invoices',14))}
+  ${card('Pool Boys Dashboard','Trucks and GPS',n('vehicles')+' vehicles',S.gps_daily&&S.gps_daily.last_change,st1('gps_daily',7),'GPS days: '+n('gps_daily'))}
+  ${card('QuickBooks / Biller Genie','What each customer pays — waiting for reports',qb?qb+' rows':'nothing loaded',null,qb?'ok':'err','Send me a report to load it')}
+  </div>
+  <h2>How a change travels</h2><div class="flow">
+   <div class="fl"><b>Route schedule</b><span class="ar">→</span> CRM customer page · Route Planner · Dashboard · WhatsApp "Which pool?" picker</div>
+   <div class="fl"><b>WhatsApp complaint</b><span class="ar">→</span> WhatsApp board <span class="ar">→</span> "Send to CRM" with assignee (e.g. David) <span class="ar">→</span> task in David's CRM list <span class="ar">→</span> <span class="sub">(next) QuickBooks estimate / PO</span></div>
+   <div class="fl"><b>Route Planner PO</b><span class="ar">→</span> task to any staff member <span class="ar">→</span> CRM</div>
+   <div class="fl"><b>Customer email</b><span class="ar">→</span> Email Chalkboard / Prospects <span class="ar">→</span> linked to customer</div>
+   <div class="fl"><b>QuickBooks / Biller Genie reports</b><span class="ar">→</span> CRM customer billing line</div></div>
+  <h2>Tasks sent between tools</h2><div class="sub">${waOpenTasks} open from WhatsApp · ${rpOpen} open from Route Planner</div>
+  ${(()=>{const L=tasks.filter(t=>t.source==='whatsapp'||t.source==='route_planner').slice(0,10);return L.length?`<table><tr><th>From</th><th>To</th><th>Note</th><th>Status</th><th>When</th></tr>${L.map(t=>`<tr><td>${esc(t.source)}</td><td>${esc(t.assignee)}</td><td>${esc((t.note||'').slice(0,80))}</td><td>${t.done?'done':'open'}</td><td>${esc(ago(t.created_at))}</td></tr>`).join('')}</table>`:'<p class="sub">None yet. When you press "Send to CRM" on the WhatsApp or Route Planner page, it shows up here and in the assignee\'s CRM list.</p>'})()}`;
+  document.getElementById('rf').onclick=load;
+ }catch(e){app.innerHTML=`<h1>Dr. Pool Brain</h1><div class="msg">Could not load: ${esc(e.message)} <button id="rf">Try again</button></div>`;document.getElementById('rf').onclick=load}
+}
+load();
+})();
+</script></body></html>
