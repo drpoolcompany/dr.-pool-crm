@@ -196,6 +196,8 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
 
   <nav class="months" id="months" role="tablist" aria-label="Month"></nav>
 
+  <section id="missing" class="alerts" aria-live="polite" hidden></section>
+
   <section id="priceBanner" class="alerts" aria-live="polite" hidden></section>
 
   <section class="stats" id="stats" aria-label="Totals"></section>
@@ -237,6 +239,8 @@ function money(n){n=Number(n||0);return (n<0?'−$':'$')+Math.abs(n).toLocaleStr
 function num(n){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2})}
 function dlabel(iso){if(iso==='2026-10-01')return 'Before app';var d=new Date(iso+'T12:00:00');return isNaN(d)?iso:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 function rnum(r){var n=parseFloat(r);return isNaN(n)?1e9:n}
+function rlabel(r){return r==='Stock'?'Stock':'Route '+r}
+function ordNote(v){var o=v.orderDate;if(!o||o===v.date||/, invoiced /.test(v.note||''))return '';return 'ordered '+o.slice(5,7)+'/'+o.slice(8,10)+', invoiced '+String(v.date).slice(5,7)+'/'+String(v.date).slice(8,10)}
 
 function bottlesOf(it){
   if(it.cat!=='acid')return 0;
@@ -376,7 +380,7 @@ function matrix(list,withTech,date){
   }
   rows.forEach(function(a){
     if(!a.inv)a.q._has=0;else a.q._has=1;
-    h+='<tr><td><b>'+lk('Route '+esc(a.key),{route:a.key,prod:'',date:date||''})+'</b></td>';
+    h+='<tr><td><b>'+lk(esc(rlabel(a.key)),{route:a.key,prod:'',date:date||''})+'</b></td>';
     if(withTech)h+='<td class="l"><input class="techin" type="text" id="tech-'+esc(a.key)+(date?'-'+esc(date):'')+'" data-route="'+esc(a.key)+'" placeholder="Add name" value="'+esc(techLabel(a.key))+'"'+' readonly'+' aria-label="Pool tech for route '+esc(a.key)+'"></td>';
     h+='<td class="m">'+a.inv+'</td>'+cells(a.key,a.q,a.others)+'<td class="m">'+money(a.spend)+'</td></tr>';
   });
@@ -713,7 +717,7 @@ function invTab(list){
     var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
     var items=(v.items||[]).map(function(i){var z=zeroLines({items:[i]}).length;return (z?'<b class="bad-t">':'')+esc(itemText(i))+(z?'</b>':'')}).join(', ');
     var stk=isStock(v);
-    h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':''))+'</td>'+
+    h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':'')+(v.order?'<small>order '+esc(v.order)+(ordNote(v)?', '+esc(ordNote(v)):'')+'</small>':''))+'</td>'+
       '<td class="l" style="white-space:normal;min-width:260px">'+items+(stk&&v.note?'<small>'+esc(v.note)+'</small>':'')+'</td><td class="m">'+(stk?'':money(v.total))+'</td>'+
       '<td class="l">'+(stk?'<button class="btn" type="button" data-stdel="'+esc(v.invoice)+'">Remove</button>':off===0?'<span class="pill ok">Lines add up</span>':'<span class="pill bad">Off by '+money(off)+'</span>')+'</td></tr>';
   });
@@ -759,6 +763,7 @@ function missKey(d,x){return d.invoice+'|'+(x.it.sku||x.it.desc||'')+'|'+x.i}
 function sameItem(a,b){return (a.sku&&b.sku)?String(a.sku).toUpperCase()===String(b.sku).toUpperCase():(a.cat!=='other'?a.cat===b.cat:prodKey(a)===prodKey(b))}
 function deliveredBy(d,it){
   var hit=null;
+  if(it.fb){var f=invoices.filter(function(v){return v.invoice===it.fb})[0];if(f)return f}
   invoices.forEach(function(v){
     if(hit||v.invoice===d.invoice)return;
     var sameOrder=d.order&&v.order&&v.order===d.order;
@@ -783,7 +788,7 @@ function renderMissing(){
   el.innerHTML='<div class="alert"><div><b>'+open.length+' item'+(open.length===1?'':'s')+' billed at 0: find the invoice that delivers '+(open.length===1?'it':'them')+'</b>'+
     '<p>These invoices list an item with 0 shipped or $0.00. It usually comes on a later invoice for the same order. Add that invoice and the alert clears on its own. If it was never delivered, press Not coming.</p></div>'+
     '<ul class="misslist">'+open.map(function(m){
-      return '<li><span><b>Missing '+esc(itemName(m.it))+'</b> on '+invLink(m.d.invoice)+', route '+esc(m.d.route)+techOf(m.d.route)+', '+esc(dlabel(m.d.date))+(m.d.order?', order '+esc(m.d.order):'')+'</span>'+
+      return '<li><span><b>Missing '+esc(itemName(m.it))+'</b> on '+invLink(m.d.invoice)+', '+esc(rlabel(m.d.route).toLowerCase())+techOf(m.d.route)+', '+esc(dlabel(m.d.date))+(m.d.order?', order '+esc(m.d.order):'')+'</span>'+
         '<button class="btn" type="button" data-missok="'+esc(m.key)+'">Not coming</button></li>';
     }).join('')+'</ul></div>';
 }
@@ -816,7 +821,7 @@ function head(title,sub){
 }
 function linesDetail(f){
   var rows=collect(f),oneRoute=!!(f.route&&f.route!=='*');
-  var title=(oneRoute?'Route '+esc(f.route)+techOf(f.route):'All routes')+' &middot; '+(f.prod?esc(prodName(f.prod)):'everything bought');
+  var title=(oneRoute?esc(rlabel(f.route))+techOf(f.route):'All routes')+' &middot; '+(f.prod?esc(prodName(f.prod)):'everything bought');
   var scope=f.date?dlabel(f.date):(dateSel==='all'?'all dates':dlabel(dateSel));
   var h='<div class="detail">'+head(title,esc(scope)+', '+rows.length+(rows.length===1?' line':' lines'));
   if(!rows.length)return h+'<div class="empty">Nothing bought for this selection.</div></div>';
@@ -848,7 +853,7 @@ function invDetail(id){
   var v=invoices.filter(function(x){return x.invoice===id})[0];
   if(!v)return '';
   var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
-  var h='<div class="detail">'+head('Invoice '+esc(v.invoice)+(isPro(v)?' <span class="pill neutral">Proline</span>':''),esc(dlabel(v.date))+' &middot; '+lk('Route '+esc(v.route),{route:v.route,prod:'',date:''})+techOf(v.route)+(v.order?' &middot; order '+esc(v.order):'')+(v.note&&!isStock(v)?' &middot; '+esc(v.note):''));
+  var h='<div class="detail">'+head('Invoice '+esc(v.invoice)+(isPro(v)?' <span class="pill neutral">Proline</span>':''),esc(dlabel(v.date))+' &middot; '+lk(esc(rlabel(v.route)),{route:v.route,prod:'',date:''})+techOf(v.route)+(v.order?' &middot; order '+esc(v.order):'')+(ordNote(v)?' &middot; '+esc(ordNote(v)):'')+(v.note&&!isStock(v)?' &middot; '+esc(v.note):''));
   h+='<div class="scroll"><table><thead><tr><th class="l">Product</th><th class="l">SKU</th><th>Quantity</th><th>Price</th><th>Amount</th></tr></thead><tbody>';
   (v.items||[]).forEach(function(it){
     var acid=it.cat==='acid';
@@ -867,7 +872,7 @@ function renderDetail(scroll){
 }
 
 function render(){
-  renderMonths();renderVendors();renderStats();renderTabs();renderDates();renderAlerts();
+  renderMonths();renderVendors();renderStats();renderTabs();renderDates();renderAlerts();renderMissing();
   var p=document.getElementById('panel');
   if(!loaded.inv){return}
   if(!monthInv().length&&tab!=='analytics'){p.innerHTML='<div class="empty">No invoices for '+esc(monthLabel(curView()))+' yet. </div>'+(curView()>=PE_FROM&&!schedFor(curView()).length?'':'');renderDetail();return}
@@ -1024,20 +1029,22 @@ function rowToInv(r){
   var its=(r.supplier_invoice_lines||[]).slice().sort(function(a,b){return (a.line_no||0)-(b.line_no||0)}).map(function(l){
     var o={cat:l.category||'other',desc:l.description||'',ext:Number(l.ext)||0,label:l.label||l.description||'',price:Number(l.price)||0,qty:Number(l.qty)||0,sku:l.sku||'',um:l.um||''};
     if(l.product_group)o.group=l.product_group;
+    if(l.fulfilled_by)o.fb=l.fulfilled_by;
     if(l.gpu!=null&&Number(l.gpu)>0)o.gpu=Number(l.gpu);
     return o;
   });
-  var v={date:String(r.invoice_date||'').slice(0,10),invoice:r.invoice_no,order:r.order_no||'',route:r.route_no==null?'?':String(r.route_no),total:Number(r.total)||0,items:its};
+  var v={date:String(r.invoice_date||'').slice(0,10),invoice:r.invoice_no,order:r.order_no||'',route:r.route_no==null?(/stock/i.test(r.po_text||'')?'Stock':'?'):String(r.route_no),total:Number(r.total)||0,items:its};
   if(r.supplier==='Proline')v.vendor='Proline';
   if(r.source==='sheet'||r.source==='stock')v.source=r.source;
   if(r.note)v.note=r.note;
   if(r.po_text)v.po=r.po_text;
+  if(r.order_date)v.orderDate=String(r.order_date).slice(0,10);
   return v;
 }
 async function loadAll(){
   var inv=[],from=0,step=500;
   for(;;){
-    var q=await sb.from('supplier_invoices').select('supplier,invoice_no,order_no,invoice_date,route_no,total,source,note,po_text,supplier_invoice_lines(line_no,sku,description,um,qty,price,ext,category,label,product_group,gpu)').order('invoice_date',{ascending:false}).order('invoice_no').range(from,from+step-1);
+    var q=await sb.from('supplier_invoices').select('supplier,invoice_no,order_no,order_date,invoice_date,route_no,total,source,note,po_text,supplier_invoice_lines(line_no,sku,description,um,qty,price,ext,category,label,product_group,gpu,fulfilled_by)').order('invoice_date',{ascending:false}).order('invoice_no').range(from,from+step-1);
     if(q.error)throw q.error;
     inv=inv.concat(q.data||[]);if(!q.data||q.data.length<step)break;from+=step;
   }
@@ -1065,7 +1072,7 @@ function srchRows(q){
   var toks=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
   if(!toks.length)return [];
   return invoices.filter(function(v){
-    var hay=[v.invoice,v.order,v.route,'route '+v.route,techLabel(v.route),(v.route==='0'?'geffet jeff':''),v.note,isPro(v)?'proline':(isStock(v)?'stock':'scp'),v.date].join(' ').toLowerCase();
+    var hay=[v.invoice,v.order,v.route,'route '+v.route,techLabel(v.route),(v.route==='0'?'geffet jeff':''),v.note,v.po||'',(v.route==='Stock'?'stock office':''),ordNote(v),v.orderDate||'',isPro(v)?'proline':(isStock(v)?'stock':'scp'),v.date].join(' ').toLowerCase();
     return toks.every(function(t){return hay.indexOf(t)>=0});
   }).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0});
 }
@@ -1075,7 +1082,7 @@ function drawSearch(){
   var r=srchRows(q),h='<div class="dhead"><div><h2>Search</h2><p>'+r.length+' match'+(r.length===1?'':'es')+' for &ldquo;'+esc(q)+'&rdquo; in all months, SCP and Proline'+(r.length>40?' (showing the newest 40)':'')+'</p></div><button class="btn" type="button" data-sr="close">Close</button></div>';
   if(!r.length)h+='<div class="empty">No invoice matches &ldquo;'+esc(q)+'&rdquo;. Try part of the invoice number, a route number or a tech name.</div>';
   else h+='<div class="misslist">'+r.slice(0,40).map(function(v){
-    return '<button type="button" class="srow" data-sr="'+esc(v.invoice)+'"><span class="mono">'+(isStock(v)?'From stock':esc(v.invoice))+'</span>'+(isPro(v)?'<span class="pill neutral">Proline</span>':'<span class="pill neutral">SCP</span>')+'<span>'+esc(dlabel(v.date))+' '+esc(String(v.date||'').slice(0,4))+'</span><span>Route '+esc(v.route)+techOf(v.route)+'</span><span class="mono">'+(isStock(v)?'':money(v.total))+'</span></button>';
+    return '<button type="button" class="srow" data-sr="'+esc(v.invoice)+'"><span class="mono">'+(isStock(v)?'From stock':esc(v.invoice))+'</span>'+(isPro(v)?'<span class="pill neutral">Proline</span>':'<span class="pill neutral">SCP</span>')+'<span>'+esc(dlabel(v.date))+' '+esc(String(v.date||'').slice(0,4))+'</span><span>'+esc(rlabel(v.route))+techOf(v.route)+'</span><span class="mono">'+(isStock(v)?'':money(v.total))+'</span></button>';
   }).join('')+'</div>';
   el.innerHTML=h;el.hidden=false;
 }
@@ -1098,6 +1105,8 @@ document.addEventListener('keydown',function(e){
   }
 });
 document.addEventListener('click',function(e){
+  var mo=e.target.closest('[data-missok]');
+  if(mo){missDismissed[mo.getAttribute('data-missok')]=1;renderMissing();return}
   var s=e.target.closest('[data-sr]');
   if(s){var k=s.getAttribute('data-sr');if(k==='close'){document.getElementById('srchIn').value='';drawSearch()}else openFound(k);return}
   var vb=e.target.closest('[data-view]');
