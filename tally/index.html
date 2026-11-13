@@ -1,0 +1,1160 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><title>Dr. Pool Chemical Tally</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working page. Totals strip on top, tabbed tables below, a detail card opens above the tables when a number is clicked. */
+:root{
+  --bg:#f2f6f6; --surface:#ffffff; --ink:#13262b; --muted:#5d7176; --line:#d5e0e1; --tint:#e9f0f1;
+  --accent:#0a6a86; --accent-ink:#ffffff; --acid:#a24a08; --acid-bg:#fbeedd;
+  --good:#1f7a4d; --good-bg:#e0f2e8; --bad:#a3301f; --bad-bg:#f9e2de;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1b1f; --surface:#15272c; --ink:#e4eef0; --muted:#8ea5ab; --line:#27414a; --tint:#1b3138;
+  --accent:#4cb8d6; --accent-ink:#06222b; --acid:#f0a35e; --acid-bg:#3a2a18;
+  --good:#6fd3a0; --good-bg:#17382a; --bad:#f19a8c; --bad-bg:#3c1f1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1b1f; --surface:#15272c; --ink:#e4eef0; --muted:#8ea5ab; --line:#27414a; --tint:#1b3138;
+  --accent:#4cb8d6; --accent-ink:#06222b; --acid:#f0a35e; --acid-bg:#3a2a18;
+  --good:#6fd3a0; --good-bg:#17382a; --bad:#f19a8c; --bad-bg:#3c1f1a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:20px 40px}
+main{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:18px}
+h1{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:600;font-size:21px;margin:0;letter-spacing:.02em}
+.sub{color:var(--muted);margin:6px 0 0}
+header{display:flex;flex-wrap:wrap;gap:12px 20px;justify-content:space-between;align-items:flex-end}
+.btn{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,.tab:focus-visible,input:focus-visible,select:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.stat .k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:var(--f-mono);font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px}
+.stat .n{font-size:12px;color:var(--muted)}
+.stat.acid .v{color:var(--acid)}
+.bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.tabs{display:flex;flex-wrap:wrap;gap:4px}
+.tab{font:inherit;font-weight:500;border:1px solid transparent;background:none;color:var(--muted);padding:7px 14px;border-radius:6px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+label.f{display:flex;align-items:center;gap:8px;color:var(--muted)}
+select,input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.panel{display:flex;flex-direction:column;gap:16px}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:500}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+tfoot td{font-weight:600;border-top:2px solid var(--line);border-bottom:0}
+tr.grp td{background:var(--tint);font-weight:600;text-align:left}
+td.m,.mono{font-family:var(--f-mono);font-size:13px}
+td.acid{color:var(--acid);font-weight:500}
+td small{display:block;color:var(--muted);font-size:11px}
+td .oi{display:block}
+.techin{width:130px;text-align:left}
+.pill{display:inline-block;font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px}
+.pill.ok{background:var(--good-bg);color:var(--good)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.lnk{font:inherit;font-family:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-align:inherit}
+td.acid .lnk{color:var(--acid)}
+.lnk:hover{text-decoration-style:solid}
+.lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.panel h2{margin:20px 0 8px}
+.dim td{color:var(--muted)}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.fig{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.fig figcaption{font-weight:500;margin-bottom:4px}
+.chart{width:100%;height:auto;display:block}
+.chart text{font-family:var(--f-body);font-size:12px;fill:var(--ink)}
+.chart .val,.chart .ref{fill:var(--muted);font-variant-numeric:tabular-nums}
+.chart .b{fill:var(--accent)}
+.chart .hi .b{fill:var(--bad)}
+.chart .lo .b{fill:var(--muted)}
+.chart .hit{fill:transparent}
+.chart .bar:hover .hit{fill:var(--tint)}
+.chart .avgl{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:4 3}
+.chart .lowl{stroke:var(--good);stroke-width:1.5}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:5px 10px;border-radius:99px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip:disabled{opacity:.45;cursor:default}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.heat td.c-hi{background:var(--bad-bg)}
+.heat td.c-lo{background:var(--tint)}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:var(--muted)}
+.note b{color:var(--ink)}
+.settings{display:flex;flex-wrap:wrap;gap:12px 24px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.day{display:flex;flex-direction:column;gap:8px}
+.detail{background:var(--surface);border:2px solid var(--accent);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.dhead{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:flex-start}
+.dhead p{margin:2px 0 0;color:var(--muted)}
+.hbtns{display:flex;flex-wrap:wrap;gap:8px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:disabled:hover{border-color:var(--line);filter:none}
+.btn.primary:disabled:hover{border-color:var(--accent)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;resize:vertical;min-height:110px}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:6px;background:var(--tint)}
+.drop.over{border-color:var(--accent)}
+.drop textarea{border-color:transparent;background:transparent}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.muted{color:var(--muted)}
+.bad-t{color:var(--bad)}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.thumbs:empty{display:none}
+.thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--tint)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:99px;border:0;background:var(--ink);color:var(--surface);cursor:pointer;line-height:1;font-size:15px;padding:0}
+.thumb .x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pv{display:flex;flex-direction:column;gap:12px;min-width:0}
+.pv:empty{display:none}
+.routein{width:64px;text-align:right}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.alerts{display:flex;flex-direction:column;gap:10px}
+.months{display:flex;flex-wrap:wrap;gap:8px}
+.mtab{font:inherit;font-family:var(--f-display);font-weight:600;font-size:17px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 16px;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left}
+.mtab small{font-family:var(--f-body);font-weight:400;font-size:12px;color:var(--muted)}
+.mtab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.mtab[aria-selected="true"] small{color:var(--accent-ink);opacity:.85}
+.mtab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.bell{display:inline-flex;gap:6px;align-items:center}
+.nlist{display:flex;flex-direction:column;gap:8px}
+.nrow{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--surface)}
+.nrow>div{min-width:0}
+.nrow small{display:block;color:var(--muted)}
+.detail h3{font-family:var(--f-display);font-weight:600;font-size:19px;margin:6px 0 0}
+.linkbtn{font:inherit;background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer}
+.wk{display:inline-flex;gap:6px;align-items:baseline;margin-right:12px}
+.stockbox{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.stockbox h3{font-family:var(--f-display);font-weight:600;font-size:19px;margin:0}
+.stockbox p{margin:0}
+.stockform{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.misslist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.misslist li{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.alert{border:1px solid var(--bad);background:var(--bad-bg);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.alert b{color:var(--bad)}
+.alert p{margin:2px 0 0}
+.alert label{font-weight:500}
+.alert textarea{min-height:64px}
+.ahead{display:flex;gap:12px;align-items:flex-start}
+.ahead>div{min-width:0}
+.athumb{width:64px;height:84px;object-fit:cover;border:1px solid var(--line);border-radius:4px;background:var(--surface);flex:none}
+.thumb .cap{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);color:#fff;font-size:11px;text-align:center;padding:1px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.pill.neutral{background:var(--tint);color:var(--ink)}
+.datein{width:140px}
+.idin{width:110px}
+input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.srch{position:relative;display:flex;align-items:center}
+.srch input{width:210px;padding-right:26px}
+.srch kbd{position:absolute;right:8px;font:11px var(--f-mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px;pointer-events:none}
+.vsw{display:inline-flex;border:1px solid var(--line);border-radius:99px;overflow:hidden;background:var(--surface)}
+.vsw button{font:inherit;font-weight:600;border:0;background:none;color:var(--muted);padding:7px 16px;cursor:pointer}
+.vsw button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.vsw button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.srow{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit;color:var(--ink);cursor:pointer}
+.srow:hover{border-color:var(--accent)}
+.srow .mono{font-weight:600}
+.fig[data-ft]{cursor:zoom-in}
+.fig[data-ft] figcaption::after{content:" \2922";color:var(--muted);font-size:13px}
+.fig[data-ft]:hover,.fig[data-ft]:focus-visible{border-color:var(--accent);outline:none}
+.ovl{position:fixed;inset:0;z-index:50;background:rgba(5,15,20,.6);display:flex;align-items:center;justify-content:center;padding:4vh 4vw}
+.ovl .ovp{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;width:min(1200px,92vw);max-height:92vh;overflow:auto;padding:16px 20px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.ovl .ovx{position:sticky;top:0;float:right;font:inherit;font-size:22px;line-height:1;width:36px;height:36px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.ovl .ovx:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ovl .fig{border:0;padding:0;cursor:default}
+.ovl .fig figcaption{font-size:20px;font-family:var(--f-display);font-weight:600;margin-bottom:8px}
+.ovl .fig figcaption::after{content:none}
+.ovl .chart text{font-size:11.5px}
+@media (max-width:520px){h1{font-size:28px}.srch input{width:150px}.ovl{padding:2vh 2vw}.ovl .ovp{width:96vw;padding:12px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>body{padding:0 0 40px}main{padding:20px 16px 0}</style>
+<main>
+  <header>
+    <div>
+      <h1>Chemical Tally</h1>
+      <p class="sub" id="range">Loading...</p>
+    </div>
+    <div class="hbtns">
+      <div class="srch"><label class="sr" for="srchIn">Find an invoice</label><input type="text" id="srchIn" placeholder="Find invoice, route, tech" autocomplete="off" aria-controls="srchRes"><kbd aria-hidden="true">/</kbd></div>
+      <div class="vsw" role="group" aria-label="View" id="viewSw"><button type="button" data-view="tally" aria-pressed="true">Tally</button><button type="button" data-view="analytics" aria-pressed="false">Analytics</button></div>
+      <button class="btn bell" id="bellBtn" type="button" aria-expanded="false" aria-controls="notif" aria-label="Price alerts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="bellN" class="pill bad" hidden>0</span></button>
+    </div>
+  </header>
+
+  <section class="detail" id="srchRes" aria-label="Invoice search results" aria-live="polite" hidden></section>
+  <section class="detail" id="notif" aria-label="Price alerts" hidden></section>
+
+  <nav class="months" id="months" role="tablist" aria-label="Month"></nav>
+
+  <section id="priceBanner" class="alerts" aria-live="polite" hidden></section>
+
+  <section class="stats" id="stats" aria-label="Totals"></section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="seg" id="vendSeg" role="group" aria-label="Vendor" hidden></div>
+    <label class="f" for="dateSel">Date <select id="dateSel"><option value="all">All dates</option></select></label>
+  </div>
+
+  <section id="detail" aria-live="polite" hidden></section>
+
+  <section class="panel" id="panel" aria-live="polite">
+    <div class="empty">Loading the tally. Invoices you upload in chat appear here.</div>
+  </section>
+</main>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../shared/drpool.js"></script>
+<script>
+(function(){
+var CATS=[
+  {k:'chlorine',h:'Liquid chlorine',u:'gal'},
+  {k:'tabs',h:'3" Xtreme tabs (50#)',u:'units'},
+  {k:'bicarb',h:'Bicarb',u:'bags'},
+  {k:'salt',h:'Salt',u:'bags'},
+  {k:'acid',h:'Muriatic acid',u:'bottles'}
+];
+var TABS=[['route','By route'],['day','By day'],['prod','By product'],['acid','Muriatic acid'],['analytics','Analytics'],['inv','Invoices']];
+var UMW={JUG:['jug','jugs'],GAL:['gal','gal'],PL:['unit','units'],PLT:['unit','units'],BAG:['bag','bags'],EA:['each','each'],DRM:['drum','drums'],CS:['box','boxes'],BTL:['bottle','bottles']};
+var invoices=[],skipped=[],cfg={bottlePrice:4.36,perBox:4,techs:{},aliases:{}},tab='route',dateSel='all',loaded={inv:false},detail=null,vendSel='all';
+function isPro(v){return !!v&&v.vendor==='Proline'}
+var BR={techs:{},weeks:[],nos:null,cur:'',inflight:{},failed:{},q:Promise.resolve()};
+function techLabel(r){return BR.techs[r]||cfg.techs[r]||''}
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function money(n){n=Number(n||0);return (n<0?'−$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function num(n){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2})}
+function dlabel(iso){if(iso==='2026-10-01')return 'Before app';var d=new Date(iso+'T12:00:00');return isNaN(d)?iso:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+function rnum(r){var n=parseFloat(r);return isNaN(n)?1e9:n}
+
+function bottlesOf(it){
+  if(it.cat!=='acid')return 0;
+  var um=String(it.um||'').toUpperCase(),q=Number(it.qty)||0;
+  if(um==='BTL')return q;
+  if(um==='CS')return q*cfg.perBox;
+  return Math.round((Number(it.ext)||0)/cfg.bottlePrice);
+}
+function priceBottles(it){return Math.round((Number(it.ext)||0)/cfg.bottlePrice)}
+/* Liquid chlorine is always counted in gallons. gpu = gallons per unit billed: 1 for gallon lines (SCP bulk, Proline 1 gallon bleach), 2.5 for a 2.5 gal jug sold by the jug. */
+function gpuOf(it){var g=Number(it.gpu);if(g>0)return g;if(it.cat==='chlorine'&&/^(JUG|JG|EA)$/i.test(String(it.um||''))&&/2\.5\s*gal/i.test((it.desc||'')+' '+(it.label||'')))return 2.5;return 1}
+function qOf(it){var q=Number(it.qty)||0;return it.cat==='chlorine'?q*gpuOf(it):q}
+function boxText(b){
+  var bx=Math.floor(b/cfg.perBox),r=b%cfg.perBox;
+  if(!b)return '';
+  if(bx&&!r)return bx+(bx===1?' box':' boxes');
+  if(bx)return bx+(bx===1?' box':' boxes')+' + '+r;
+  return 'loose';
+}
+function prodKey(it){return it.cat==='other'||!it.cat?'other:'+(it.group||it.label||it.desc):it.cat}
+/* A product that is not a standing column moves out of "Other items" into its own column once 2 or more of it have been bought in total. */
+var PROMOTE_AT=2;
+function promoted(){
+  var tot={},sample={};
+  invoices.forEach(function(v){(v.items||[]).forEach(function(it){
+    if(it.cat&&it.cat!=='other')return;
+    var k=prodKey(it);tot[k]=(tot[k]||0)+(Number(it.qty)||0);if(!sample[k])sample[k]=it;
+  })});
+  return Object.keys(tot).filter(function(k){return tot[k]>=PROMOTE_AT}).map(function(k){
+    return {k:k,h:k.slice(6),u:unitWord(sample[k],2)};
+  }).sort(function(a,b){return a.h<b.h?-1:a.h>b.h?1:0});
+}
+function columns(){return CATS.concat(promoted())}
+function prodName(k){
+  if(k.indexOf('other:')===0)return k.slice(6);
+  for(var i=0;i<CATS.length;i++)if(CATS[i].k===k)return CATS[i].h;
+  return k;
+}
+function unitWord(it,q){
+  var w=UMW[String(it.um||'').toUpperCase()];
+  if(!w)return String(it.um||'').toLowerCase();
+  return q===1?w[0]:w[1];
+}
+function qtyText(it){
+  var q=Number(it.qty)||0;
+  if(it.cat==='acid'){
+    var b=bottlesOf(it);
+    if(String(it.um).toUpperCase()==='CS')return num(q)+(q===1?' box':' boxes')+' = '+b+' bottles';
+    return num(q)+(q===1?' bottle':' bottles');
+  }
+  if(it.cat==='chlorine'){var g=gpuOf(it);if(g!==1)return num(q)+' '+unitWord(it,q)+' = '+num(q*g)+' gal';if(/jugs?\s*x\s*2\.5/i.test(it.desc||''))return num(q)+' gal ('+num(q/2.5)+' jugs)';return num(q)+' gal'}
+  return num(q)+' '+unitWord(it,q);
+}
+function groupQty(key,rows){
+  if(key==='acid'){var b=rows.reduce(function(s,r){return s+bottlesOf(r.it)},0);return num(b)+' bottles ('+boxText(b)+')'}
+  var q=rows.reduce(function(s,r){return s+qOf(r.it)},0);
+  for(var i=0;i<CATS.length;i++)if(CATS[i].k===key)return num(q)+' '+(q===1&&CATS[i].u.slice(-1)==='s'?CATS[i].u.slice(0,-1):CATS[i].u);
+  return num(q)+' '+unitWord(rows[0].it,q);
+}
+var monthSel=null;
+function nowMonth(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function allMonths(){var m={};invoices.forEach(function(v){var k=String(v.date||'').slice(0,7);if(k)m[k]=1});allSched().forEach(function(x){var k=String(x.week||'').slice(0,7);if(k)m[k]=1});m[nowMonth()]=1;return Object.keys(m).sort()}
+function curView(){var ms=allMonths();return monthSel&&ms.indexOf(monthSel)>=0?monthSel:ms[ms.length-1]}
+function monthInvAll(){var mo=curView();return invoices.filter(function(v){return String(v.date||'').slice(0,7)===mo})}
+function monthInv(){return monthInvAll().filter(function(v){return vendSel==='all'||(vendSel==='Proline'?isPro(v):!isPro(v))})}
+function visible(){return monthInv().filter(function(v){return dateSel==='all'||v.date===dateSel})}
+function renderMonths(){
+  var mo=curView();
+  document.getElementById('months').innerHTML=allMonths().slice().reverse().map(function(m){
+    var n=invoices.filter(function(v){return String(v.date||'').slice(0,7)===m}).length;
+    return '<button class="mtab" type="button" role="tab" data-month="'+m+'" aria-selected="'+(m===mo)+'">'+esc(monthLabel(m))+'<small>'+n+' invoice'+(n===1?'':'s')+'</small></button>';
+  }).join('');
+}
+function techOf(route){var n=techLabel(route);return n?' ('+esc(n)+')':''}
+
+function aggregate(list,keyFn){
+  var m={},PROM={};
+  promoted().forEach(function(c){PROM[c.k]=1});
+  list.forEach(function(v){
+    var k=keyFn(v);
+    var a=m[k]||(m[k]={key:k,q:{},others:{},other:0,spend:0,inv:0});
+    a.inv++;
+    (v.items||[]).forEach(function(it){
+      var c=it.cat||'other',ext=Number(it.ext)||0;
+      if(c==='acid')a.q.acid=(a.q.acid||0)+bottlesOf(it);
+      else if(c==='other'){var pk=prodKey(it);if(PROM[pk]){a.q[pk]=(a.q[pk]||0)+(Number(it.qty)||0)}else{a.other+=ext;var lb=pk.slice(6);a.others[lb]=(a.others[lb]||0)+(Number(it.qty)||0)}}
+      else a.q[c]=(a.q[c]||0)+qOf(it);
+      a.spend+=ext;
+    });
+  });
+  return Object.keys(m).map(function(k){return m[k]});
+}
+function totals(rows){
+  var t={q:{},others:{},other:0,spend:0,inv:0};
+  rows.forEach(function(a){
+    t.inv+=a.inv;t.other+=a.other;t.spend+=a.spend;
+    Object.keys(a.q).forEach(function(c){t.q[c]=(t.q[c]||0)+a.q[c]});
+    Object.keys(a.others).forEach(function(c){t.others[c]=(t.others[c]||0)+a.others[c]});
+  });
+  return t;
+}
+
+function lk(label,attrs){
+  var s='<button class="lnk" type="button" data-act="lines"';
+  Object.keys(attrs).forEach(function(k){s+=' data-'+k+'="'+esc(attrs[k])+'"'});
+  return s+'>'+label+'</button>';
+}
+function invLink(id){return '<button class="lnk" type="button" data-act="inv" data-inv="'+esc(id)+'">'+esc(id)+'</button>'}
+
+function matrix(list,withTech,date){
+  var rows=aggregate(list,function(v){return String(v.route||'?')});
+  if(withTech&&!date&&!rows.some(function(r){return r.key==='0'}))rows.push({key:'0',q:{},others:{},other:0,spend:0,inv:0});
+  rows=rows.sort(function(a,b){return rnum(a.key)-rnum(b.key)});
+  var t=totals(rows);
+  var h='<div class="scroll"><table><thead><tr><th>Route</th>'+(withTech?'<th class="l">Pool tech</th>':'')+'<th>Invoices</th>';
+  var cols=columns();
+  cols.forEach(function(c){h+='<th>'+esc(c.h)+'<br>('+esc(c.u)+')</th>'});
+  h+='<th class="l">Other items</th><th>Spend</th></tr></thead><tbody>';
+  function nearNote(){
+    var mo=curView(),o=invoices.filter(function(v){return String(v.route)==='0'&&String(v.date||'').slice(0,7)!==mo});
+    if(!o.length)return '';
+    var by={};o.forEach(function(v){var k=String(v.date).slice(0,7);(by[k]=by[k]||[]).push(v)});
+    return Object.keys(by).sort().reverse().map(function(k){var t=0;by[k].forEach(function(v){t+=Number(v.total)||0});
+      return '<span class="oi"><button class="lnk" type="button" data-month="'+k+'">'+by[k].length+' invoice'+(by[k].length===1?'':'s')+' in '+esc(monthLabel(k).split(' ')[0])+': '+money(t)+' (view)</button></span>'}).join('');
+  }
+  function cells(route,q,others){
+    var s='';
+    cols.forEach(function(c){
+      var v=q[c.k]||0;
+      if(!v){s+='<td class="m'+(c.k==='acid'?' acid':'')+'"></td>';return}
+      var b=lk(num(v),{route:route,prod:c.k,date:date||''});
+      s+=c.k==='acid'?'<td class="m acid">'+b+'<small>'+boxText(v)+'</small></td>':'<td class="m">'+b+'</td>';
+    });
+    var oi=Object.keys(others).map(function(l){return '<span class="oi">'+lk(num(others[l])+' '+esc(l),{route:route,prod:'other:'+l,date:date||''})+'</span>'}).join('');
+    s+='<td class="l m">'+oi+(route==='0'&&!q._has?nearNote():'')+'</td>';
+    return s;
+  }
+  rows.forEach(function(a){
+    if(!a.inv)a.q._has=0;else a.q._has=1;
+    h+='<tr><td><b>'+lk('Route '+esc(a.key),{route:a.key,prod:'',date:date||''})+'</b></td>';
+    if(withTech)h+='<td class="l"><input class="techin" type="text" id="tech-'+esc(a.key)+(date?'-'+esc(date):'')+'" data-route="'+esc(a.key)+'" placeholder="Add name" value="'+esc(techLabel(a.key))+'"'+' readonly'+' aria-label="Pool tech for route '+esc(a.key)+'"></td>';
+    h+='<td class="m">'+a.inv+'</td>'+cells(a.key,a.q,a.others)+'<td class="m">'+money(a.spend)+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Total</td>'+(withTech?'<td></td>':'')+'<td class="m">'+t.inv+'</td>'+cells('*',t.q,{})+'<td class="m">'+money(t.spend)+'</td></tr></tfoot></table></div>';
+  return h;
+}
+
+function renderStats(){
+  var rows=aggregate(visible(),function(){return 'all'});
+  var t=totals(rows);
+  var acid=t.q.acid||0;
+  var base=monthInvAll().filter(function(v){return dateSel==='all'||v.date===dateSel}),sp=0,pp=0,np=0,ns=0;
+  base.forEach(function(v){var s=0;(v.items||[]).forEach(function(i){s+=Number(i.ext)||0});if(isStock(v)||v.source==='sheet'){sp+=s}else if(isPro(v)){pp+=s;np++}else{sp+=s;ns++}});
+  var spendTiles='<div class="stat"><div class="k">SCP spend</div><div class="v">'+money(sp)+'</div><div class="n">'+(np?ns+' invoice'+(ns===1?'':'s')+', ':'')+'no tax or freight on these</div></div>'+
+    (np?'<div class="stat"><div class="k">Proline spend</div><div class="v">'+money(pp)+'</div><div class="n">'+np+' invoice'+(np===1?'':'s')+', no tax on these</div></div>'+
+    '<div class="stat"><div class="k">Combined spend</div><div class="v">'+money(sp+pp)+'</div><div class="n">SCP plus Proline</div></div>':'');
+  document.getElementById('stats').innerHTML=
+    '<div class="stat"><div class="k">Invoices</div><div class="v">'+t.inv+'</div><div class="n">'+(visible().length?'counted':'none yet')+'</div></div>'+
+    spendTiles+
+    '<div class="stat"><div class="k">Liquid chlorine</div><div class="v">'+num(t.q.chlorine||0)+'</div><div class="n">gallons'+(t.q.chlorine?', about '+num(Math.round(t.q.chlorine/2.5))+' jugs of 2.5 gal':'')+'</div></div>'+
+    '<div class="stat acid"><div class="k">Muriatic acid</div><div class="v">'+num(acid)+'</div><div class="n">bottles'+(acid?', '+boxText(acid):'')+'</div></div>';
+}
+function renderVendors(){
+  var el=document.getElementById('vendSeg');if(!el)return;
+  var has=invoices.some(isPro);
+  if(!has&&vendSel!=='all')vendSel='all';
+  el.hidden=!has;
+  el.innerHTML=has?[['all','All vendors'],['SCP','SCP only'],['Proline','Proline only']].map(function(x){return '<button type="button" class="chip" data-act="vend" data-k="'+x[0]+'" aria-pressed="'+(vendSel===x[0])+'">'+x[1]+'</button>'}).join(''):'';
+}
+var lastTab='route';
+function renderTabs(){
+  var an=tab==='analytics';if(!an)lastTab=tab;
+  var tb=document.getElementById('tabs');tb.hidden=an;
+  Array.prototype.forEach.call(document.querySelectorAll('#viewSw button'),function(b){b.setAttribute('aria-pressed',String((b.getAttribute('data-view')==='analytics')===an))});
+  tb.innerHTML=TABS.filter(function(t){return t[0]!=='analytics'}).map(function(t){return '<button class="tab" role="tab" type="button" data-t="'+t[0]+'" aria-selected="'+(tab===t[0])+'">'+t[1]+'</button>'}).join('');
+}
+function renderDates(){
+  var mi=monthInv(),ds=Array.from(new Set(mi.map(function(v){return v.date}))).sort().reverse();
+  var sel=document.getElementById('dateSel');
+  sel.innerHTML='<option value="all">All dates</option>'+ds.map(function(d){return '<option value="'+esc(d)+'">'+esc(dlabel(d))+'</option>'}).join('');
+  if(dateSel!=='all'&&ds.indexOf(dateSel)<0)dateSel='all';
+  sel.value=dateSel;
+  var all=mi.map(function(v){return v.date}).sort();
+  document.getElementById('range').textContent='Dr. Pool, customer 121328, SCP Fort Lauderdale. '+monthLabel(curView())+(all.length?': '+dlabel(all[0])+(all[0]!==all[all.length-1]?' to '+dlabel(all[all.length-1]):'')+', '+mi.length+' invoices.':', no invoices yet.');
+}
+
+function acidTab(list){
+  var lines=[];
+  list.forEach(function(v){(v.items||[]).forEach(function(it){if(it.cat==='acid')lines.push({v:v,it:it})})});
+  lines.sort(function(a,b){return a.v.date<b.v.date?1:a.v.date>b.v.date?-1:rnum(a.v.route)-rnum(b.v.route)});
+  var tb=0,ts=0;
+  var h='<div class="settings"><label class="f" for="bp">Bottle price <input type="number" step="0.01" min="0" id="bp" value="'+cfg.bottlePrice+'" style="width:90px"></label>'+
+    '<label class="f" for="pb">Bottles per box <input type="number" step="1" min="1" id="pb" value="'+cfg.perBox+'" style="width:70px"></label></div>';
+  h+='<div class="note">Counts come from the invoice unit: <b>BTL</b> is single bottles, <b>CS</b> is a box of '+cfg.perBox+'. The price column is a second check. If the dollars divided by the bottle price disagree with the unit, the row is flagged.</div>';
+  if(!lines.length)return h+'<div class="empty">No muriatic acid on these invoices.</div>';
+  h+='<div class="scroll"><table><thead><tr><th>Date</th><th>Route</th><th class="l">Invoice</th><th>Billed as</th><th>Line total</th><th>Bottles</th><th>Boxes</th><th class="l">Price check</th></tr></thead><tbody>';
+  lines.forEach(function(x){
+    var b=bottlesOf(x.it),pb=isPro(x.v)?Math.round((Number(x.it.ext)||0)/(Number(x.it.price)||1)):priceBottles(x.it),ok=b===pb;
+    tb+=b;ts+=Number(x.it.ext)||0;
+    h+='<tr><td>'+esc(dlabel(x.v.date))+'</td><td class="m">'+esc(x.v.route)+'</td><td class="l mono">'+invLink(x.v.invoice)+'</td>'+
+      '<td class="m">'+num(x.it.qty)+' '+esc(x.it.um)+'</td><td class="m">'+money(x.it.ext)+'</td>'+
+      '<td class="m acid">'+b+'</td><td class="m">'+(b/cfg.perBox)+'</td>'+
+      '<td class="l">'+(ok?'<span class="pill ok">Matches</span>':'<span class="pill bad">Price says '+pb+'</span>')+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Total</td><td></td><td></td><td></td><td class="m">'+money(ts)+'</td><td class="m acid">'+tb+'</td><td class="m">'+(tb/cfg.perBox)+'</td><td></td></tr></tfoot></table></div>';
+  return h;
+}
+
+/* ---------- Analytics: the QUIMICOS sheet's columns R to AA, run for every chemical ---------- */
+var DEF_STOPS={0:['GEFET',0],1:['MIKA',64],2:['LUIS PINASCO',81],3:['EVALDO',90],4:['RODRIGO',90],5:['CARLOS',82],6:['MIKE',79],7:['SAMUEL',85],8:['FABIO',90],9:['JEAN',64],10:['ADALBERTO',63],11:['MAICON',41],12:['ALDO',12]};
+var NOCOMP={'0':1,'12':1}; /* Gefet and Aldo are shown but left out of the lowest and the average */
+var AN=[
+  {k:'chlorine',h:'Liquid chlorine',u:'gal'},
+  {k:'tabs',h:'3" Xtreme tabs (50#)',u:'units'},
+  {k:'acid',h:'Muriatic acid',u:'gal'},
+  {k:'salt',h:'Salt',u:'bags'},
+  {k:'bicarb',h:'Bicarb',u:'bags'},
+  {k:'calcium',h:'Calcium',u:'bags'},
+  {k:'stab',h:'Stabilizer',u:'drums'},
+  {k:'nofumes',h:'No Fumes / sulfuric',u:'gal'},
+  {k:'de',h:'DE / perlite',u:'bags'}
+];
+var GAL_PER_JUG=2.5,OUT=0.25;
+var an={stops:{},wpm:4.3,bench:null,month:null,basis:'pe'},stopsRef=null,anChem='chlorine';
+function anKey(it){
+  var c=it.cat;
+  if(c==='chlorine'||c==='tabs'||c==='salt'||c==='acid'||c==='bicarb')return c;
+  var t=(it.group||'')+' '+(it.label||'')+' '+(it.desc||'')+' '+(it.sku||'');
+  if(/calcium|cal[ -]?chlor|cal[ -]?hypo|hardness/i.test(t))return 'calcium';
+  if(/stabil|granular 100|EZC-50-8100/i.test(t))return 'stab';
+  if(/no fumes|sulfuric/i.test(t))return 'nofumes';
+  if(/perlite|\bDE\b|filter media/i.test(t))return 'de';
+  return null;
+}
+function brainStops(r){
+  var mo=curView(),hit=null;
+  BR.weeks.forEach(function(w){if(String(w.week).slice(0,7)===mo)hit=w});
+  var x=hit&&hit.routes[r];return x&&x.stops>0?x.stops:null;
+}
+function stopsOf(r){var v=an.stops[r];if(v!==undefined&&v!==null&&v!=='')return Number(v)||0;var b=brainStops(r);if(b!==null)return b;return DEF_STOPS[r]?DEF_STOPS[r][1]:0}
+function techName(r){return techLabel(r)||(DEF_STOPS[r]?DEF_STOPS[r][0]:'Route '+r)}
+function anMonths(){return Array.from(new Set(invoices.map(function(v){return String(v.date||'').slice(0,7)}))).filter(Boolean).sort()}
+function monthLabel(m){var d=new Date(m+'-15T12:00:00');return isNaN(d)?m:d.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
+function curMonth(){var ms=anMonths();return an.month&&ms.indexOf(an.month)>=0?an.month:ms[ms.length-1]}
+
+function analyze(list,wpm,benchOverride,baseFn){
+  var m={};
+  Object.keys(DEF_STOPS).forEach(function(r){m[r]={route:r,q:{},c:{},W:0}});
+  list.forEach(function(v){
+    var r=String(v.route||'?'),a=m[r]||(m[r]={route:r,q:{},c:{},W:0});
+    (v.items||[]).forEach(function(it){
+      var ext=Number(it.ext)||0;a.W+=ext;
+      var k=anKey(it);if(!k)return;
+      var q=k==='acid'?bottlesOf(it):qOf(it);
+      a.q[k]=(a.q[k]||0)+q;a.c[k]=(a.c[k]||0)+ext;
+    });
+  });
+  var rows=Object.keys(m).map(function(r){return m[r]}).sort(function(a,b){return rnum(a.route)-rnum(b.route)});
+  var A={rows:rows,wpm:wpm,tot:{q:{},c:{},W:0,S:0},comp:{q:{},c:{},W:0,S:0},chem:{}};
+  rows.forEach(function(a){
+    a.S=baseFn?baseFn(a.route):stopsOf(a.route);a.name=techName(a.route);
+    a.comp=!NOCOMP[a.route]&&a.S>0&&a.W>0;
+    [A.tot].concat(a.comp?[A.comp]:[]).forEach(function(t){
+      t.W+=a.W;t.S+=a.S;
+      AN.forEach(function(c){t.q[c.k]=(t.q[c.k]||0)+(a.q[c.k]||0);t.c[c.k]=(t.c[c.k]||0)+(a.c[c.k]||0)});
+    });
+  });
+  /* columns W, Y, AA, X: cost, cost per quant, gap to the lowest, gap times quant */
+  var low=null;
+  rows.forEach(function(a){a.Y=a.S>0?a.W/a.S:null;if(a.comp&&(low===null||a.Y<low))low=a.Y});
+  A.lowest=low;A.bench=benchOverride>0?benchOverride:low;
+  A.avgY=A.comp.S?A.comp.W/A.comp.S:null;
+  rows.forEach(function(a){
+    a.AA=(a.Y!==null&&A.bench!==null&&a.W>0)?a.Y-A.bench:null;
+    a.X=a.AA!==null?a.S*a.AA:null;
+    a.dAvg=(a.Y!==null&&A.avgY!==null&&a.W>0)?a.Y-A.avgY:null;
+    a.XAvg=a.dAvg!==null?a.S*a.dAvg:null;
+  });
+  /* the same columns for each chemical */
+  AN.forEach(function(c){
+    /* the average only counts the compared routes that bought this chemical */
+    var s={k:c.k,low:null,lowCost:null,lowName:'',buyers:0},bq=0,bc=0,bS=0;
+    rows.forEach(function(a){if(a.comp&&(a.q[c.k]||0)>0){bq+=a.q[c.k];bc+=a.c[c.k]||0;bS+=a.S;s.buyers++}});
+    s.avgT=bS?bq/bS:0;
+    s.avgV=s.avgT/wpm;
+    s.avgCost=bS?bc/bS:0;
+    rows.forEach(function(a){
+      if(!a.comp)return;
+      var q=a.q[c.k]||0;if(!q)return;
+      var t=q/a.S;if(s.low===null||t<s.low){s.low=t;s.lowName=a.name}
+      var cc=(a.c[c.k]||0)/a.S;if(s.lowCost===null||cc<s.lowCost)s.lowCost=cc;
+    });
+    A.chem[c.k]=s;
+  });
+  return A;
+}
+function cm(a,k,A){
+  var q=a.q[k]||0,c=a.c[k]||0,s=A.chem[k],T=a.S?q/a.S:null;
+  var r={q:q,c:c,T:T,V:T!==null?T/A.wpm:null,Y:a.S?c/a.S:null};
+  r.pctTot=A.tot.q[k]?q/A.tot.q[k]:0;
+  r.vsLow=(a.comp&&q&&s.low!==null)?T-s.low:null;
+  r.vsAvg=(a.comp&&q&&s.avgT)?(T-s.avgT)/s.avgT:null;
+  r.extra=(a.comp&&q&&r.Y!==null)?a.S*(r.Y-s.avgCost):null;
+  r.flag=r.vsAvg===null?'':r.vsAvg>=OUT?'hi':(q&&r.vsAvg<=-OUT)?'lo':'';
+  return r;
+}
+function f2(n){return Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function f3(n){return Number(n).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3})}
+function pct(n){return (n>=0?'+':'−')+Math.abs(Math.round(n*100))+'%'}
+function sgn(n,f){return (n>=0?'+':'−')+f(Math.abs(n))}
+function flagPill(f,txt){return f==='hi'?'<span class="pill bad">▲ '+txt+'</span>':f==='lo'?'<span class="pill neutral">▼ '+txt+'</span>':'<span class="pill ok">'+txt+'</span>'}
+
+/* Horizontal bar chart: one bar per tech, a dashed line for the average and a solid one for the lowest. */
+function hbar(o){
+  var rows=o.rows;if(!rows.length)return '';
+  var W=640,L=118,R=86,rh=26,top=34,H=top+rows.length*rh+8;
+  var max=Math.max.apply(null,rows.map(function(r){return r.v}).concat([o.avg||0,o.low||0]))||1;
+  function x(v){return L+(W-L-R)*Math.max(0,v)/max}
+  var s='<figure class="fig" data-ft="'+esc(o.title)+'" tabindex="0" role="button" aria-label="Enlarge chart: '+esc(o.title)+'"><figcaption>'+esc(o.title)+'</figcaption><svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(o.title)+'">';
+  rows.forEach(function(r,i){
+    var y=top+i*rh,w=Math.max(1,x(r.v)-L);
+    s+='<g class="bar '+(r.flag||'')+'"><title>'+esc(r.tip)+'</title><rect class="hit" x="0" y="'+y+'" width="'+W+'" height="'+rh+'"></rect>'+
+      '<text class="lab" x="'+(L-8)+'" y="'+(y+17)+'" text-anchor="end">'+esc(r.label)+'</text>'+
+      '<rect class="b" x="'+L+'" y="'+(y+6)+'" width="'+w+'" height="'+(rh-12)+'" rx="3"></rect>'+
+      '<text class="val" x="'+(L+w+6)+'" y="'+(y+17)+'">'+esc(o.fmt(r.v))+(r.flag==='hi'?' ▲':r.flag==='lo'?' ▼':'')+'</text></g>';
+  });
+  if(o.low!==null&&o.low!==undefined){var xl=x(o.low);s+='<line class="lowl" x1="'+xl+'" x2="'+xl+'" y1="'+(top-4)+'" y2="'+(H-4)+'"></line><text class="ref" x="'+xl+'" y="26" text-anchor="middle">Lowest '+esc(o.fmt(o.low))+'</text>'}
+  if(o.avg!==null&&o.avg!==undefined){var xa=x(o.avg);s+='<line class="avgl" x1="'+xa+'" x2="'+xa+'" y1="'+(top-4)+'" y2="'+(H-4)+'"></line><text class="ref" x="'+xa+'" y="12" text-anchor="middle">Average '+esc(o.fmt(o.avg))+'</text>'}
+  return s+'</svg></figure>';
+}
+
+/* ---------- weekly schedules (November 2026 on): pools and income per route ---------- */
+var schedules=[],PE_FROM='2026-11';
+/* brain weeks (Sunday-dated in the brain, shown here by their Monday) win over manual uploads of the same week */
+function allSched(){
+  var out=BR.weeks.slice(),have={};
+  BR.weeks.forEach(function(w){have[w.week]=1});
+  schedules.forEach(function(s){if(!have[s.week])out.push(s)});
+  return out;
+}
+function schedFor(mo){return allSched().filter(function(s){return String(s.week||'').slice(0,7)===mo}).sort(function(a,b){return a.week<b.week?-1:1})}
+/* average a month's weekly schedules; pool equivalents = income / (total income / total pools) */
+function peBase(mo){
+  var ws=schedFor(mo),R={};
+  ws.forEach(function(s){Object.keys(s.routes||{}).forEach(function(r){
+    var x=s.routes[r],a=R[r]||(R[r]={route:r,name:x.name,pools:0,income:0});
+    a.pools+=(Number(x.pools)||0)/ws.length;a.income+=(Number(x.income)||0)/ws.length;a.name=x.name||a.name;
+  })});
+  var tp=0,ti=0;Object.keys(R).forEach(function(r){tp+=R[r].pools;ti+=R[r].income});
+  var avg=tp?ti/tp:0;
+  Object.keys(R).forEach(function(r){R[r].pe=avg?R[r].income/avg:0});
+  return {weeks:ws,routes:R,pools:tp,income:ti,avg:avg};
+}
+function weekLabel(iso){var d=new Date(iso+'T12:00:00'),e=new Date(d.getTime()+4*864e5);function f(x){return x.toLocaleDateString('en-US',{month:'short',day:'numeric'})}return isNaN(d)?iso:f(d)+' to '+f(e)}
+
+function analyticsTab(){
+  var mo=curView(),wpm=an.wpm>0?an.wpm:4.3,list=monthInv();
+  if(!list.length&&mo<PE_FROM)return '<div class="empty">No invoices this month.</div>';
+  var peMode=mo>=PE_FROM,P=null,basis='quant',sN='quant',sLong='weekly visits';
+  if(peMode){
+    P=peBase(mo);
+    if(!P.weeks.length)return '<div class="note">No weekly schedule has reached the Brain for '+esc(monthLabel(mo))+' yet, so the pool equivalents cannot be worked out. It appears here on its own once the schedule is in the Brain.</div>';
+    basis=an.basis==='visits'?'visits':'pe';
+    sN=basis==='pe'?'pool equiv':'pool';sLong=basis==='pe'?'pool equivalents':'pools (weekly visits)';
+  }
+  var baseFn=peMode?function(r){var x=P.routes[r];return x?(basis==='pe'?x.pe:x.pools):0}:null;
+  var A=analyze(list,wpm,an.bench,baseFn),rows=A.rows,comp=rows.filter(function(a){return a.comp});
+  if(peMode)rows.forEach(function(a){var x=P.routes[a.route];a.inc=x?x.income:0;a.pools=x?x.pools:0;a.pe=x?x.pe:0;if(x&&x.name&&!techLabel(a.route))a.name=x.name});
+  var h='<div class="settings">'+
+    (peMode?'<div class="seg" role="group" aria-label="Compare by"><button type="button" class="chip" data-act="anbasis" data-k="pe" aria-pressed="'+(basis==='pe')+'">Pool equivalents</button><button type="button" class="chip" data-act="anbasis" data-k="visits" aria-pressed="'+(basis==='visits')+'">Pools</button></div>':'')+
+    '<label class="f" for="anwk">Weeks in the month <input type="number" step="0.1" min="0.1" id="anwk" value="'+wpm+'" style="width:72px"></label>'+
+    '<label class="f" for="anbn">Lowest $ per '+esc(sN)+' <input type="number" step="0.01" min="0" id="anbn" value="'+(an.bench>0?an.bench:'')+'" placeholder="'+(A.lowest===null?'':f2(A.lowest))+'" style="width:96px"></label></div>';
+  if(peMode){
+    h+='<div class="note"><b>Pool equivalents</b> weigh each route by the income it brings in, because the price is close to the size of the pool. Pools equiv = route income ÷ (total income ÷ total pools), so all routes together still add up to the total pools. A route of big, expensive pools gets more pool equivalents than pools, and is allowed more chemicals. '+esc(monthLabel(mo))+' uses '+P.weeks.length+' weekly schedule'+(P.weeks.length===1?'':'s')+' ('+P.weeks.map(function(s){return esc(weekLabel(s.week))}).join(', ')+'), averaged. Per month divides by '+esc(sN)+'; per visit divides that by '+wpm+' weeks. Aldo and Gefet are shown but left out of the lowest and the average. 25% or more above the average is flagged ▲, 25% or more below ▼.</div>';
+    /* the pool-equivalent table, as in the report */
+    h+='<h2>Pool equivalents, '+esc(monthLabel(mo))+'</h2><div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Pools</th><th>Income</th><th>Avg $ per pool</th><th>Pools equiv</th><th>Equiv vs pools</th><th>Chem cost</th><th>Chem cost<br>% of income</th></tr></thead><tbody>';
+    var ti=0,tp=0,tw=0;
+    rows.forEach(function(a){
+      if(!a.pools&&!a.W&&a.route!=='0')return;ti+=a.inc;tp+=a.pools;tw+=a.W;
+      var pc=a.inc?a.W/a.inc:null;
+      h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+(a.comp?'':' <small>'+(NOCOMP[a.route]?'not compared':'no invoices yet')+'</small>')+'</td><td class="m">'+num(a.pools)+'</td><td class="m">'+(a.inc?money(a.inc):'')+'</td><td class="m">'+(a.pools?money(a.inc/a.pools):'')+'</td><td class="m">'+(a.pools?f2(a.pe):'')+'</td><td class="m">'+(a.pools?'×'+f2(a.pe/a.pools):'')+'</td><td class="m">'+money(a.W)+'</td><td class="m">'+(pc!==null?(pc*100).toFixed(1)+'%':'')+'</td></tr>';
+    });
+    h+='</tbody><tfoot><tr><td>Total</td><td></td><td class="m">'+num(tp)+'</td><td class="m">'+money(ti)+'</td><td class="m">'+(tp?money(ti/tp):'')+'</td><td class="m">'+num(Math.round(tp))+'</td><td></td><td class="m">'+money(tw)+'</td><td class="m">'+(ti?(tw/ti*100).toFixed(1)+'%':'')+'</td></tr></tfoot></table></div>';
+    h+='<div class="note">Income is the sum of the schedule prices for the week, the monthly price of each visit. Chem cost % of income is this month\'s SCP spend so far against that income; it grows as the month fills in. Equiv vs pools above ×1.00 means the route\'s pools pay more than average, so it should use more chemicals per pool.</div>';
+  }else{
+    h+='<div class="note"><b>Quant</b> is weekly visits from the schedule, not pools: a pool done 3 times a week is 3. Per month is the month\'s total divided by quant (sheet column T); per visit divides that by '+wpm+' weeks (column V). Aldo and Gefet are shown but left out of the lowest and the average. The average is the whole company: all compared routes\' totals divided by their quant. A number 25% or more above the average is flagged ▲, 25% or more below is ▼. Leave the lowest box empty to use the cheapest route, as the sheet does.</div>';
+  }
+
+  /* headline tiles */
+  var chl=A.chem.chlorine,X=comp.reduce(function(s,a){return s+(a.X||0)},0);
+  h+='<div class="stats">'+
+    '<div class="stat"><div class="k">'+(peMode?'Pools a week':'Visits a week')+'</div><div class="v">'+num(Math.round(A.comp.S))+'</div><div class="n">'+(peMode?esc(sLong)+', Aldo and Gefet out':'about '+num(Math.round(A.comp.S*wpm))+' in the month, Aldo and Gefet out')+'</div></div>'+
+    '<div class="stat"><div class="k">Chlorine per '+esc(sN)+'</div><div class="v">'+f2(chl.avgT)+'</div><div class="n">gal for the month, '+f3(chl.avgV)+' per visit</div></div>'+
+    '<div class="stat"><div class="k">Chemicals per '+esc(sN)+'</div><div class="v">'+(A.avgY!==null?money(A.avgY):'')+'</div><div class="n">'+(A.avgY!==null?money(A.avgY/wpm)+' per visit':'')+'</div></div>'+
+    '<div class="stat"><div class="k">Spent over the lowest</div><div class="v">'+money(X)+'</div><div class="n">column X, gasto a mais</div></div></div>';
+
+  /* 1. the sheet, columns R to AA */
+  var SL=peMode?(basis==='pe'?'pools equiv':'pools'):'quant';
+  h+='<h2>Chlorine and cost, columns R to AA as in the sheet</h2><div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Bleach<br>(gal)</th><th>R<br>% cloro</th><th>S<br>'+esc(SL)+'</th><th>T<br>gal / '+esc(sN)+' / month</th><th>U<br>jugs / '+esc(sN)+' / month</th><th>V<br>gal / visit</th><th>W<br>custo total</th><th>Y<br>$ / '+esc(sN)+'</th><th>AA<br>vs lowest</th><th>X<br>gasto a mais</th><th>vs average</th><th>Over the average</th></tr></thead><tbody>';
+  rows.forEach(function(a){
+    if(!a.S&&!a.W&&a.route!=='0')return;
+    var C=a.q.chlorine||0,T=a.S?C/a.S:null;
+    h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+(a.comp?'':' <small>'+(NOCOMP[a.route]?'not compared':'no invoices yet')+'</small>')+'</td><td class="m">'+num(C)+'</td><td class="m">'+(A.tot.q.chlorine?(C/A.tot.q.chlorine*100).toFixed(1)+'%':'')+'</td><td class="m">'+(peMode?f2(a.S):a.S)+'</td>'+
+      '<td class="m">'+(T!==null?f2(T):'')+'</td><td class="m">'+(T!==null?f2(T/GAL_PER_JUG):'')+'</td><td class="m">'+(T!==null?f3(T/wpm):'')+'</td><td class="m">'+money(a.W)+'</td><td class="m">'+(a.Y!==null?money(a.Y):'')+'</td>'+
+      '<td class="m">'+(a.comp&&a.AA!==null?sgn(a.AA,f2):'')+'</td><td class="m">'+(a.comp&&a.X!==null?money(a.X):'')+'</td>'+
+      '<td class="m">'+(a.comp&&a.dAvg!==null?flagPill(A.avgY&&a.dAvg/A.avgY>=OUT?'hi':A.avgY&&a.dAvg/A.avgY<=-OUT?'lo':'',sgn(a.dAvg,f2)):'')+'</td><td class="m">'+(a.comp&&a.XAvg!==null?money(a.XAvg):'')+'</td></tr>';
+  });
+  var tc=A.tot.q.chlorine||0,tS=A.tot.S,tT=tS?tc/tS:0;
+  h+='</tbody><tfoot><tr><td>Total</td><td></td><td class="m">'+num(tc)+'</td><td class="m">100%</td><td class="m">'+num(Math.round(tS))+'</td><td class="m">'+f2(tT)+'</td><td class="m">'+f2(tT/GAL_PER_JUG)+'</td><td class="m">'+f3(tT/wpm)+'</td><td class="m">'+money(A.tot.W)+'</td><td class="m">'+(tS?money(A.tot.W/tS):'')+'</td><td></td><td class="m">'+money(X)+'</td><td></td><td></td></tr></tfoot></table></div>';
+  h+='<div class="note">W adds every line billed to the route that month. AA is Y minus the lowest route\'s Y'+(an.bench>0?' (you set the lowest to '+money(an.bench)+')':' ('+(A.lowest!==null?money(A.lowest):'none')+')')+'. X is S times AA. Over the average is S times the gap to the company average.</div>';
+  h+='<div class="charts">'+
+    hbar({title:'Chemical cost per '+sN+' (Y), '+monthLabel(mo),rows:comp.map(function(a){var d=A.avgY?a.Y/A.avgY-1:0;return {label:a.name,v:a.Y,flag:d>=OUT?'hi':d<=-OUT?'lo':'',tip:a.name+': '+money(a.Y)+' per '+sN+', '+pct(d)+' vs average'}}),avg:A.avgY,low:A.bench,fmt:function(v){return money(v)}})+
+    hbar({title:'Gasto a mais (X): spent over the lowest',rows:comp.slice().sort(function(a,b){return (b.X||0)-(a.X||0)}).map(function(a){return {label:a.name,v:a.X||0,flag:'',tip:a.name+': '+money(a.X||0)+' over the lowest'}}),fmt:function(v){return money(v)}})+
+    (peMode?hbar({title:'Chemical cost as % of income',rows:comp.map(function(a){var v=a.inc?a.W/a.inc*100:0;return {label:a.name,v:v,flag:'',tip:a.name+': '+v.toFixed(1)+'% of '+money(a.inc)}}),avg:(function(){var w=0,i=0;comp.forEach(function(a){w+=a.W;i+=a.inc});return i?w/i*100:null})(),fmt:function(v){return v.toFixed(1)+'%'}}):'')+
+    '</div>';
+
+  /* 2. one chemical at a time */
+  var cur=AN.filter(function(c){return c.k===anChem})[0]||AN[0],s=A.chem[cur.k];
+  h+='<h2>Each chemical, the same columns</h2><div class="chips" role="tablist">'+AN.map(function(c){var used=A.tot.q[c.k]>0;return '<button type="button" class="chip" data-act="anchem" data-k="'+c.k+'" aria-pressed="'+(c.k===cur.k)+'"'+(used?'':' disabled')+'>'+esc(c.h)+'</button>'}).join('')+'</div>';
+  var buy=comp.filter(function(a){return (a.q[cur.k]||0)>0});
+  h+='<div class="charts">'+hbar({title:cur.h+', '+cur.u+' per visit (routes that bought it)',rows:buy.map(function(a){var r=cm(a,cur.k,A);return {label:a.name,v:r.V||0,flag:r.flag,tip:a.name+': '+f3(r.V||0)+' '+cur.u+' per visit'+(r.vsAvg!==null?', '+pct(r.vsAvg)+' vs average':'')}}),avg:s.avgV,low:s.low!==null?s.low/wpm:null,fmt:function(v){return f3(v)}})+
+    hbar({title:cur.h+', $ per '+sN+' for the month',rows:buy.map(function(a){var r=cm(a,cur.k,A);var d=s.avgCost?r.Y/s.avgCost-1:0;return {label:a.name,v:r.Y||0,flag:d>=OUT?'hi':(r.q&&d<=-OUT)?'lo':'',tip:a.name+': '+money(r.Y||0)+' per '+sN}}),avg:s.avgCost,low:s.lowCost,fmt:function(v){return money(v)}})+'</div>';
+  h+='<div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Bought<br>('+esc(cur.u)+')</th><th>% of total</th><th>'+esc(SL.charAt(0).toUpperCase()+SL.slice(1))+'</th><th>Per '+esc(sN)+'<br>per month</th>'+(cur.k==='chlorine'?'<th>Jugs per '+esc(sN)+'<br>per month</th>':'')+'<th>Per visit</th><th>Cost</th><th>$ per '+esc(sN)+'</th><th>Vs lowest<br>(per '+esc(sN)+')</th><th>Vs average</th><th>Over the average</th></tr></thead><tbody>';
+  rows.forEach(function(a){
+    if(!a.S&&!a.W&&a.route!=='0')return;
+    var r=cm(a,cur.k,A);
+    h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+'</td><td class="m">'+(r.q?num(r.q):'')+'</td><td class="m">'+(r.q?(r.pctTot*100).toFixed(1)+'%':'')+'</td><td class="m">'+(peMode?f2(a.S):a.S)+'</td>'+
+      '<td class="m">'+(r.T!==null&&r.q?f2(r.T):'')+'</td>'+(cur.k==='chlorine'?'<td class="m">'+(r.T!==null&&r.q?f2(r.T/GAL_PER_JUG):'')+'</td>':'')+
+      '<td class="m">'+(r.V!==null&&r.q?f3(r.V):'')+'</td><td class="m">'+(r.c?money(r.c):'')+'</td><td class="m">'+(r.Y!==null&&r.c?money(r.Y):'')+'</td>'+
+      '<td class="m">'+(r.vsLow!==null?sgn(r.vsLow,f2):'')+'</td><td class="m">'+(r.vsAvg!==null?flagPill(r.flag,pct(r.vsAvg)):(a.comp&&!r.q&&s.buyers?'<small>didn\'t buy, not in the average</small>':''))+'</td><td class="m">'+(r.extra!==null&&r.q?money(r.extra):'')+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Average</td><td></td><td class="m">'+num(A.tot.q[cur.k]||0)+'</td><td class="m">100%</td><td class="m">'+s.buyers+' bought</td><td class="m">'+f2(s.avgT)+'</td>'+(cur.k==='chlorine'?'<td class="m">'+f2(s.avgT/GAL_PER_JUG)+'</td>':'')+'<td class="m">'+f3(s.avgV)+'</td><td class="m">'+money(A.tot.c[cur.k]||0)+'</td><td class="m">'+money(s.avgCost)+'</td><td class="m">'+(s.low!==null?'lowest '+f2(s.low)+'<small>'+esc(s.lowName)+'</small>':'')+'</td><td></td><td></td></tr></tfoot></table></div>';
+  h+='<div class="note">The average and the lowest only count the routes that bought this chemical this month; a route that bought none is left out of both, and the heat grid shows it as none. Acid is counted in bottles, and a bottle is a gallon.</div>';
+
+  /* 3. every chemical per visit vs the average */
+  var used=AN.filter(function(c){return A.tot.q[c.k]>0});
+  h+='<h2>Every chemical per visit, against the average</h2><div class="scroll"><table class="heat"><thead><tr><th>Route</th><th class="l">Tech</th>'+used.map(function(c){return '<th>'+esc(c.h)+'<br>('+esc(c.u)+')</th>'}).join('')+'<th>All chemicals<br>($ per visit)</th></tr></thead><tbody>';
+  comp.forEach(function(a){
+    h+='<tr><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+'</td>';
+    used.forEach(function(c){var r=cm(a,c.k,A);h+='<td class="m'+(r.flag?' c-'+r.flag:'')+'">'+(r.q?f3(r.V)+'<small>'+pct(r.vsAvg)+'</small>':'<small>none</small>')+'</td>'});
+    var d=A.avgY?a.Y/A.avgY-1:0;
+    h+='<td class="m'+(d>=OUT?' c-hi':d<=-OUT?' c-lo':'')+'">'+money(a.Y/wpm)+'<small>'+pct(d)+'</small></td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Average</td><td></td>'+used.map(function(c){return '<td class="m">'+f3(A.chem[c.k].avgV)+'</td>'}).join('')+'<td class="m">'+(A.avgY!==null?money(A.avgY/wpm):'')+'</td></tr></tfoot></table></div>';
+  h+='<div class="note">'+(peMode?'Per visit here is per '+esc(sN)+' per week. ':'')+'Red cells are 25% or more above the average, gray ones 25% or more below. Low is not always good: it can mean the tech is buying somewhere else or skipping the chemical.</div>';
+
+  /* 4. outliers, biggest money first */
+  var outs=[];
+  comp.forEach(function(a){AN.forEach(function(c){var r=cm(a,c.k,A);if(r.flag&&r.q)outs.push({a:a,c:c,r:r})})});
+  outs.sort(function(x,y){return (y.r.extra||0)-(x.r.extra||0)});
+  h+='<h2>Outliers</h2>';
+  if(!outs.length)h+='<div class="empty">No tech is 25% or more off the average on any chemical this month.</div>';
+  else{
+    h+='<div class="scroll"><table><thead><tr><th class="l">Tech</th><th class="l">Chemical</th><th>Per visit</th><th>Average</th><th>Vs average</th><th>Over the average</th></tr></thead><tbody>';
+    outs.forEach(function(o){h+='<tr><td class="l">'+esc(o.a.name)+' <small>route '+esc(o.a.route)+'</small></td><td class="l">'+esc(o.c.h)+'</td><td class="m">'+f3(o.r.V)+' '+esc(o.c.u)+'</td><td class="m">'+f3(A.chem[o.c.k].avgV)+'</td><td class="m">'+flagPill(o.r.flag,pct(o.r.vsAvg))+'</td><td class="m">'+money(o.r.extra)+'</td></tr>'});
+    h+='</tbody></table></div>';
+  }
+
+  /* 5. October only: weekly visits editor */
+  if(!peMode){
+    h+='<h2>Quant: weekly visits per route</h2><div class="settings">'+Object.keys(DEF_STOPS).map(function(r){
+      return '<label class="f" for="st-'+r+'">'+esc(r)+' '+esc(techName(r))+' <input type="number" min="0" step="1" class="stin" id="st-'+r+'" data-route="'+r+'" value="'+stopsOf(r)+'" style="width:70px"></label>';
+    }).join('')+'</div><div class="note">From the 09/27 to 10/03 schedule, 841 visits a week. Change a number when a route grows or shrinks; it changes this page only and is not saved.</div>';
+  }
+  return h;
+}
+
+function saveAn(patch){an=Object.assign({},an,patch)}
+
+function invTab(list){
+  var rows=list.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:rnum(a.route)-rnum(b.route)});
+  var h='<div class="scroll"><table><thead><tr><th>Date</th><th>Route</th><th class="l">Invoice</th><th class="l">Items</th><th>Total</th><th class="l">Check</th></tr></thead><tbody>';
+  rows.forEach(function(v){
+    var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
+    var items=(v.items||[]).map(function(i){var z=zeroLines({items:[i]}).length;return (z?'<b class="bad-t">':'')+esc(itemText(i))+(z?'</b>':'')}).join(', ');
+    var stk=isStock(v);
+    h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':''))+'</td>'+
+      '<td class="l" style="white-space:normal;min-width:260px">'+items+(stk&&v.note?'<small>'+esc(v.note)+'</small>':'')+'</td><td class="m">'+(stk?'':money(v.total))+'</td>'+
+      '<td class="l">'+(stk?'<button class="btn" type="button" data-stdel="'+esc(v.invoice)+'">Remove</button>':off===0?'<span class="pill ok">Lines add up</span>':'<span class="pill bad">Off by '+money(off)+'</span>')+'</td></tr>';
+  });
+  return h+'</tbody></table></div><div class="note">Click an invoice number to see everything on it.</div>';
+}
+
+function productTab(list){
+  var m={};
+  list.forEach(function(v){(v.items||[]).forEach(function(it){
+    var k=prodKey(it);
+    var a=m[k]||(m[k]={k:k,rows:[],spend:0,routes:{},inv:{}});
+    a.rows.push({v:v,it:it});a.spend+=Number(it.ext)||0;a.routes[v.route]=1;a.inv[v.invoice]=1;
+  })});
+  var order=CATS.map(function(c){return c.k});
+  var keys=Object.keys(m).sort(function(a,b){
+    var ia=order.indexOf(a),ib=order.indexOf(b);
+    if(ia<0&&ib<0)return a<b?-1:1;
+    if(ia<0)return 1;if(ib<0)return -1;return ia-ib;
+  });
+  var h='<div class="scroll"><table><thead><tr><th class="l">Product</th><th>Total bought</th><th>Spend</th><th class="l">Routes</th><th>Invoices</th></tr></thead><tbody>';
+  var ts=0;
+  keys.forEach(function(k){
+    var a=m[k];ts+=a.spend;
+    var routes=Object.keys(a.routes).sort(function(x,y){return rnum(x)-rnum(y)}).join(', ');
+    h+='<tr><td class="l"><b>'+lk(esc(prodName(k)),{route:'*',prod:k,date:''})+'</b></td><td class="m'+(k==='acid'?' acid':'')+'">'+esc(groupQty(k,a.rows))+'</td><td class="m">'+money(a.spend)+'</td><td class="l m">'+esc(routes)+'</td><td class="m">'+Object.keys(a.inv).length+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Total</td><td></td><td class="m">'+money(ts)+'</td><td></td><td></td></tr></tfoot></table></div>';
+  return h+'<div class="note">Click a product to see every purchase, with date, route and invoice.</div>';
+}
+
+/* ---------- lines billed at 0: something ordered but not delivered ---------- */
+var missDismissed={},missRef=null;
+function zeroLines(d){
+  return (d.items||[]).map(function(it,i){return {it:it,i:i}}).filter(function(x){
+    var it=x.it,pr=Number(it.price)||0,q=Number(it.qty)||0,e=Number(it.ext)||0;
+    if(/msds/i.test(it.desc||'')||String(it.sku||'').toUpperCase()==='CP')return false;
+    return pr>0&&(q===0||e===0);
+  });
+}
+function itemName(it){return it.cat==='acid'?'muriatic acid':String(it.label||it.desc||'').replace(/^(gal|gals|bag|bags|pail|pails|plt|box|boxes|each|unit|units)\s+/i,'')}
+function itemText(it){return qtyText(it)+' '+itemName(it)}
+function missKey(d,x){return d.invoice+'|'+(x.it.sku||x.it.desc||'')+'|'+x.i}
+function sameItem(a,b){return (a.sku&&b.sku)?String(a.sku).toUpperCase()===String(b.sku).toUpperCase():(a.cat!=='other'?a.cat===b.cat:prodKey(a)===prodKey(b))}
+function deliveredBy(d,it){
+  var hit=null;
+  invoices.forEach(function(v){
+    if(hit||v.invoice===d.invoice)return;
+    var sameOrder=d.order&&v.order&&v.order===d.order;
+    if(!sameOrder)return;
+    (v.items||[]).forEach(function(o){if(!hit&&sameItem(o,it)&&(Number(o.qty)||0)>0)hit=v});
+  });
+  return hit;
+}
+function missingList(){
+  var out=[];
+  invoices.forEach(function(d){zeroLines(d).forEach(function(x){
+    var k=missKey(d,x),by=deliveredBy(d,x.it);
+    out.push({d:d,it:x.it,key:k,by:by,dismissed:!!missDismissed[k]});
+  })});
+  return out.sort(function(a,b){return a.d.date<b.d.date?1:-1});
+}
+function renderMissing(){
+  var el=document.getElementById('missing');if(!el)return;
+  var all=missingList(),open=all.filter(function(m){return !m.by&&!m.dismissed});
+  if(!open.length){el.innerHTML='';el.hidden=true;return}
+  el.hidden=false;
+  el.innerHTML='<div class="alert"><div><b>'+open.length+' item'+(open.length===1?'':'s')+' billed at 0: find the invoice that delivers '+(open.length===1?'it':'them')+'</b>'+
+    '<p>These invoices list an item with 0 shipped or $0.00. It usually comes on a later invoice for the same order. Add that invoice and the alert clears on its own. If it was never delivered, press Not coming.</p></div>'+
+    '<ul class="misslist">'+open.map(function(m){
+      return '<li><span><b>Missing '+esc(itemName(m.it))+'</b> on '+invLink(m.d.invoice)+', route '+esc(m.d.route)+techOf(m.d.route)+', '+esc(dlabel(m.d.date))+(m.d.order?', order '+esc(m.d.order):'')+'</span>'+
+        '<button class="btn" type="button" data-missok="'+esc(m.key)+'">Not coming</button></li>';
+    }).join('')+'</ul></div>';
+}
+function zeroAlert(d){
+  var z=zeroLines(d);if(!z.length)return '';
+  return '<div class="alert"><div><b>Invoice '+esc(d.invoice)+' has '+z.length+' item'+(z.length===1?'':'s')+' at 0: '+z.map(function(x){return esc(itemText(x.it))}).join(', ')+'</b>'+
+    '<p>You can still add it. After it is added, the tally keeps an alert at the top until the invoice that delivers '+(z.length===1?'this item':'these items')+(d.order?' (same order, '+esc(d.order)+')':'')+' is added.</p></div></div>';
+}
+
+function isStock(v){return v&&v.source==='stock'}
+function skippedNote(){return ''}
+
+/* ---------- detail card ---------- */
+function collect(f){
+  var out=[];
+  monthInv().forEach(function(v){
+    if(dateSel!=='all'&&v.date!==dateSel)return;
+    if(f.date&&v.date!==f.date)return;
+    if(f.route&&f.route!=='*'&&String(v.route)!==String(f.route))return;
+    (v.items||[]).forEach(function(it){
+      if(f.prod&&prodKey(it)!==f.prod)return;
+      out.push({v:v,it:it});
+    });
+  });
+  out.sort(function(a,b){return a.v.date<b.v.date?-1:a.v.date>b.v.date?1:rnum(a.v.route)-rnum(b.v.route)});
+  return out;
+}
+function head(title,sub){
+  return '<div class="dhead"><div><h2>'+title+'</h2><p>'+sub+'</p></div><button class="btn" type="button" data-act="close">Close</button></div>';
+}
+function linesDetail(f){
+  var rows=collect(f),oneRoute=!!(f.route&&f.route!=='*');
+  var title=(oneRoute?'Route '+esc(f.route)+techOf(f.route):'All routes')+' &middot; '+(f.prod?esc(prodName(f.prod)):'everything bought');
+  var scope=f.date?dlabel(f.date):(dateSel==='all'?'all dates':dlabel(dateSel));
+  var h='<div class="detail">'+head(title,esc(scope)+', '+rows.length+(rows.length===1?' line':' lines'));
+  if(!rows.length)return h+'<div class="empty">Nothing bought for this selection.</div></div>';
+  var cols=3+(oneRoute?0:1)+1;
+  h+='<div class="scroll"><table><thead><tr><th>Date</th>'+(oneRoute?'':'<th class="l">Route</th>')+'<th class="l">Invoice</th>'+(f.prod?'':'<th class="l">Product</th>')+'<th>Quantity</th><th>Amount</th></tr></thead><tbody>';
+  var spend=0;
+  rows.forEach(function(r){
+    spend+=Number(r.it.ext)||0;
+    var acid=r.it.cat==='acid';
+    h+='<tr><td>'+esc(dlabel(r.v.date))+'</td>'+(oneRoute?'':'<td class="l m">'+esc(r.v.route)+'</td>')+
+      '<td class="l mono">'+(isStock(r.v)?'<span class="muted">From stock</span>':invLink(r.v.invoice))+'</td>'+(f.prod?'':'<td class="l">'+esc(prodName(prodKey(r.it)))+'</td>')+
+      '<td class="m'+(acid?' acid':'')+'">'+esc(qtyText(r.it))+'</td><td class="m">'+(isStock(r.v)?'':money(r.it.ext))+'</td></tr>';
+  });
+  var foot;
+  if(f.prod)foot=esc(groupQty(f.prod,rows));
+  else foot='';
+  h+='</tbody><tfoot><tr><td>Total</td>'+(oneRoute?'':'<td></td>')+'<td></td>'+(f.prod?'':'<td></td>')+'<td class="m">'+foot+'</td><td class="m">'+money(spend)+'</td></tr></tfoot></table></div>';
+  if(!f.prod){
+    var g={};rows.forEach(function(r){var k=prodKey(r.it);(g[k]=g[k]||[]).push(r)});
+    var order=CATS.map(function(c){return c.k});
+    var keys=Object.keys(g).sort(function(a,b){var ia=order.indexOf(a),ib=order.indexOf(b);if(ia<0&&ib<0)return a<b?-1:1;if(ia<0)return 1;if(ib<0)return -1;return ia-ib});
+    h+='<div class="scroll"><table><thead><tr><th class="l">Product</th><th>Total</th><th>Spend</th></tr></thead><tbody>'+
+      keys.map(function(k){return '<tr><td class="l">'+lk(esc(prodName(k)),{route:f.route||'*',prod:k,date:f.date||''})+'</td><td class="m'+(k==='acid'?' acid':'')+'">'+esc(groupQty(k,g[k]))+'</td><td class="m">'+money(g[k].reduce(function(s,r){return s+(Number(r.it.ext)||0)},0))+'</td></tr>'}).join('')+
+      '</tbody></table></div>';
+  }
+  return h+'</div>';
+}
+function invDetail(id){
+  var v=invoices.filter(function(x){return x.invoice===id})[0];
+  if(!v)return '';
+  var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
+  var h='<div class="detail">'+head('Invoice '+esc(v.invoice)+(isPro(v)?' <span class="pill neutral">Proline</span>':''),esc(dlabel(v.date))+' &middot; '+lk('Route '+esc(v.route),{route:v.route,prod:'',date:''})+techOf(v.route)+(v.order?' &middot; order '+esc(v.order):'')+(v.note&&!isStock(v)?' &middot; '+esc(v.note):''));
+  h+='<div class="scroll"><table><thead><tr><th class="l">Product</th><th class="l">SKU</th><th>Quantity</th><th>Price</th><th>Amount</th></tr></thead><tbody>';
+  (v.items||[]).forEach(function(it){
+    var acid=it.cat==='acid';
+    h+='<tr><td class="l">'+esc(it.desc||it.label)+'</td><td class="l mono">'+esc(it.sku)+'</td><td class="m'+(acid?' acid':'')+'">'+esc(qtyText(it))+'</td><td class="m">'+money(it.price)+' / '+esc(String(it.um||'').toLowerCase())+'</td><td class="m">'+money(it.ext)+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Invoice total</td><td></td><td></td><td></td><td class="m">'+money(v.total)+'</td></tr></tfoot></table></div>';
+  h+='<div>'+(off===0?'<span class="pill ok">Lines add up to the printed total</span>':'<span class="pill bad">Lines are off by '+money(off)+'</span>')+'</div></div>';
+  return h;
+}
+function renderDetail(scroll){
+  var el=document.getElementById('detail');
+  var html='';
+  if(detail){html=detail.kind==='inv'?invDetail(detail.id):linesDetail(detail)}
+  el.innerHTML=html;el.hidden=!html;
+  if(html&&scroll){try{el.scrollIntoView({block:'nearest'})}catch(x){}}
+}
+
+function render(){
+  renderMonths();renderVendors();renderStats();renderTabs();renderDates();renderAlerts();
+  var p=document.getElementById('panel');
+  if(!loaded.inv){return}
+  if(!monthInv().length&&tab!=='analytics'){p.innerHTML='<div class="empty">No invoices for '+esc(monthLabel(curView()))+' yet. </div>'+(curView()>=PE_FROM&&!schedFor(curView()).length?'':'');renderDetail();return}
+  var list=visible(),h='';
+  if(tab==='route'){h=matrix(list,true,'')+'<div class="note">Route is the "Customer P/O number" on each SCP invoice. Proline invoices are filed under the route or tech named on them; use the vendor buttons to split them out. Click a route, or any number in the table, to see the dates behind it. A product bought 2 or more times gets its own column; one-offs stay under Other items. Invoices are added from the Claude tally page; this page only reads them.</div>';}
+  else if(tab==='day'){
+    var ds=Array.from(new Set(list.map(function(v){return v.date}))).sort().reverse();
+    h=ds.map(function(d){return '<div class="day"><h2>'+esc(dlabel(d))+'</h2>'+matrix(list.filter(function(v){return v.date===d}),true,d)+'</div>'}).join('');
+  }
+  else if(tab==='prod'){h=productTab(list)}
+  else if(tab==='acid'){h=acidTab(list)}
+  else if(tab==='analytics'){h=analyticsTab(list)}
+  else{h=invTab(list)}
+  p.innerHTML=h+skippedNote();
+  renderDetail();
+}
+
+document.addEventListener('click',function(e){
+  var mb=e.target.closest('[data-month]');
+  if(mb){monthSel=mb.getAttribute('data-month');dateSel='all';detail=null;render();return}
+  var b=e.target.closest('[data-act]');
+  if(b){
+    var a=b.getAttribute('data-act');
+    if(a==='close'){detail=null;renderDetail();return}
+    if(a==='lines'){detail={kind:'lines',route:b.getAttribute('data-route')||'',prod:b.getAttribute('data-prod')||'',date:b.getAttribute('data-date')||''};renderDetail(true);return}
+    if(a==='anbasis'){saveAn({basis:b.getAttribute('data-k')});render();return}
+    if(a==='anchem'){anChem=b.getAttribute('data-k');render();return}
+    if(a==='vend'){vendSel=b.getAttribute('data-k')||'all';dateSel='all';detail=null;render();return}
+    if(a==='inv'){detail={kind:'inv',id:b.getAttribute('data-inv')};renderDetail(true);return}
+  }
+  var t=e.target.closest('.tab');
+  if(t){tab=t.getAttribute('data-t');render()}
+});
+document.getElementById('dateSel').addEventListener('change',function(e){dateSel=e.target.value;render()});
+
+document.addEventListener('change',function(e){
+  var el=e.target;if(!el||!el.classList)return;
+  if(el.classList.contains('stin')){var st=Object.assign({},an.stops);st[el.getAttribute('data-route')]=Math.max(0,parseInt(el.value,10)||0);saveAn({stops:st});render()}
+  else if(el.id==='anwk'){var w=parseFloat(el.value);saveAn({wpm:w>0?w:4.3});render()}
+  else if(el.id==='anbn'){var b=parseFloat(el.value);saveAn({bench:b>0?b:null});render()}
+  else if(el.id==='bp'){var v=parseFloat(el.value);if(v>0){cfg=Object.assign({},cfg,{bottlePrice:v});render()}}
+  else if(el.id==='pb'){var n=parseInt(el.value,10);if(n>0){cfg=Object.assign({},cfg,{perBox:n});render()}}
+});
+
+/* ---------- price-change notifications ---------- */
+var alertAck={},alertShowAck=false,notifOpen=false;
+var PRICE_MIN=0.02,PRICE_PCT=0.01,PRICE_WINDOW=8;
+var PW={GAL:'gal',BAG:'bag',BTL:'bottle',CS:'case',EA:'each',DRM:'drum',PL:'pail',PLT:'pail',JUG:'jug'};
+var XV={chlorine:'gal',acid:'bottle',salt:'bag',bicarb:'bag'};
+function vendOf(v){return isPro(v)?'Proline':'SCP'}
+function mmdd(iso){var m=/^\d{4}-(\d{2})-(\d{2})/.exec(iso||'');return m?m[1]+'/'+m[2]:String(iso||'')}
+function unitPrice(it){var p=Number(it.price)||0,u=String(it.um||'').toUpperCase();if(it.cat==='chlorine')return p/gpuOf(it);if(it.cat==='acid')return u==='CS'?p/(cfg.perBox||4):p;return p}
+function priceLines(){
+  var rows=[];
+  invoices.forEach(function(v){
+    if(!v||v.source==='stock'||v.source==='sheet')return;
+    (v.items||[]).forEach(function(it,i){
+      var p=Number(it.price)||0;if(!(p>0))return;
+      var vd=vendOf(v);
+      rows.push({v:v,it:it,i:i,p:p,vendor:vd,k:vd+'|'+(it.sku||prodKey(it))+'|'+String(it.um||'').toUpperCase()});
+    });
+  });
+  rows.sort(function(a,b){return a.v.date<b.v.date?-1:a.v.date>b.v.date?1:a.v.invoice<b.v.invoice?-1:a.v.invoice>b.v.invoice?1:a.i-b.i});
+  return rows;
+}
+/* the typical price: the most common of the last few prices paid to that vendor for that product; a tie goes to the latest */
+function typicalPrice(hist){
+  var h=hist.slice(-PRICE_WINDOW),cnt={},best=null,bc=0;
+  h.forEach(function(p){var k=p.toFixed(2);cnt[k]=(cnt[k]||0)+1});
+  h.forEach(function(p){var k=p.toFixed(2);if(cnt[k]>=bc){bc=cnt[k];best=p}});
+  return best;
+}
+function priceAlerts(){
+  var hist={},out=[];
+  priceLines().forEach(function(r){
+    var h=hist[r.k]||(hist[r.k]=[]);
+    if(h.length){
+      var base=typicalPrice(h),d=Math.round((r.p-base)*100)/100;
+      if(Math.abs(d)>=PRICE_MIN&&Math.abs(d)/base>=PRICE_PCT){
+        out.push({id:(r.k+'|'+r.v.invoice+'|'+r.i).replace(/\./g,'_'),dir:d>0?'up':'down',name:prodName(prodKey(r.it)),from:base,to:r.p,unit:PW[String(r.it.um||'').toUpperCase()]||String(r.it.um||'').toLowerCase()||'unit',vendor:r.vendor,inv:r.v.invoice,route:r.v.route,date:r.v.date,cat:r.it.cat});
+      }
+    }
+    h.push(r.p);
+  });
+  return out.sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:a.inv<b.inv?1:a.inv>b.inv?-1:0});
+}
+function vendorGaps(){
+  var latest={};
+  priceLines().forEach(function(r){var c=r.it.cat;if(!XV[c])return;latest[c+'|'+r.vendor]={p:unitPrice(r.it)}});
+  return Object.keys(XV).map(function(c){
+    var s=latest[c+'|SCP'],p=latest[c+'|Proline'];if(!s||!p)return null;
+    var gap=Math.round((p.p-s.p)*100)/100;
+    return {cat:c,name:prodName(c),unit:XV[c],scp:s.p,pro:p.p,gap:gap,pct:s.p?gap/s.p:0};
+  }).filter(Boolean);
+}
+function gapText(g){
+  if(g.gap>0)return 'Proline is the more expensive one: '+money(g.pro)+' vs '+money(g.scp)+' per '+g.unit+' at SCP, '+money(g.gap)+' more ('+Math.round(g.pct*100)+'%)';
+  if(g.gap<0)return 'Proline is cheaper here: '+money(g.pro)+' vs '+money(g.scp)+' per '+g.unit+' at SCP, '+money(-g.gap)+' less';
+  return 'Same price at both vendors: '+money(g.scp)+' per '+g.unit;
+}
+function alertText(a){
+  return '<b>'+esc(a.name)+' went '+a.dir+':</b> '+money(a.from)+' -&gt; '+money(a.to)+' per '+esc(a.unit)+', '+esc(a.vendor)+', invoice '+invLink(a.inv)+', route '+esc(a.route)+', '+esc(mmdd(a.date));
+}
+function renderAlerts(){
+  var bell=document.getElementById('bellN');if(!bell)return;
+  var al=priceAlerts(),gaps=vendorGaps(),gapBy={};
+  gaps.forEach(function(g){gapBy[g.cat]=g});
+  var open=al.filter(function(a){return !alertAck[a.id]}),done=al.filter(function(a){return alertAck[a.id]});
+  bell.textContent=open.length;bell.hidden=!open.length;
+  var bb=document.getElementById('bellBtn');
+  bb.setAttribute('aria-expanded',notifOpen?'true':'false');
+  bb.title=open.length?open.length+' new price change'+(open.length===1?'':'s'):'No new price changes';
+  function row(a,isAck){
+    var g=gapBy[a.cat];
+    return '<div class="nrow"><div><span class="pill '+(a.dir==='up'?'bad':'neutral')+'">'+(a.dir==='up'?'Up':'Info, down')+'</span> '+alertText(a)+(g?'<small>'+esc(gapText(g))+'</small>':'')+'</div>'+
+      '<button class="btn" type="button" data-'+(isAck?'unack':'ack')+'="'+esc(a.id)+'">'+(isAck?'Undo':'Acknowledge')+'</button></div>';
+  }
+  /* banner: the newest unacknowledged increases */
+  var ban=document.getElementById('priceBanner'),ups=open.filter(function(a){return a.dir==='up'}).slice(0,3);
+  if(!ups.length||notifOpen){ban.innerHTML='';ban.hidden=true}
+  else{
+    ban.hidden=false;
+    ban.innerHTML=ups.map(function(a){return '<div class="alert"><div>'+alertText(a)+'</div><div class="row"><button class="btn" type="button" data-ack="'+esc(a.id)+'">Acknowledge</button><button class="btn" type="button" data-bell="1">All price alerts ('+open.length+')</button></div></div>'}).join('');
+  }
+  var el=document.getElementById('notif');
+  if(!notifOpen){el.innerHTML='';el.hidden=true;return}
+  el.hidden=false;
+  var h='<div class="dhead"><div><h2>Price alerts</h2><p>Each invoice line is compared with the typical price paid to the same vendor for the same product (the most common of the last '+PRICE_WINDOW+'). Increases are flagged; decreases are for information. '+al.length+' found across '+invoices.length+' invoices, newest first.</p></div><div class="hbtns">'+(open.length?'<button class="btn primary" type="button" data-ackall="1">Acknowledge all ('+open.length+')</button>':'')+'<button class="btn" type="button" data-bell="1">Close</button></div></div>';
+  h+='<h3>New ('+open.length+')</h3>'+(open.length?'<div class="nlist">'+open.slice(0,100).map(function(a){return row(a,false)}).join('')+'</div>'+(open.length>100?'<div class="note">Showing the newest 100.</div>':''):'<div class="empty">No new price changes.</div>');
+  h+='<h3>Vendor price gap</h3>'+(gaps.length?'<div class="nlist">'+gaps.map(function(g){return '<div class="nrow"><div><b>'+esc(g.name)+'</b> <small>'+esc(gapText(g))+' (latest price from each vendor)</small></div></div>'}).join('')+'</div>':'<div class="empty">No product has been bought from both vendors yet.</div>');
+  h+='<div><button class="linkbtn" type="button" data-ackshow="1">'+(alertShowAck?'Hide':'Show')+' acknowledged ('+done.length+')</button></div>';
+  if(alertShowAck&&done.length)h+='<div class="nlist">'+done.slice(0,100).map(function(a){return row(a,true)}).join('')+'</div>';
+  el.innerHTML=h;
+}
+var remoteAck={},localAck={};
+try{localAck=JSON.parse(localStorage.getItem('tally-ack')||'{}')||{}}catch(x){localAck={}}
+function mergeAck(){var m={};Object.keys(remoteAck).forEach(function(k){m[k]=1});Object.keys(localAck).forEach(function(k){if(localAck[k])m[k]=1;else delete m[k]});alertAck=m}
+function saveAck(){mergeAck();try{localStorage.setItem('tally-ack',JSON.stringify(localAck))}catch(x){}renderAlerts()}
+function setAck(id,on){localAck[id]=on?1:0;saveAck()}
+document.addEventListener('click',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  if(t.closest('#bellBtn')||t.closest('[data-bell]')){notifOpen=!notifOpen;renderAlerts();return}
+  var a=t.closest('[data-ack]');if(a){setAck(a.getAttribute('data-ack'),true);return}
+  var u=t.closest('[data-unack]');if(u){setAck(u.getAttribute('data-unack'),false);return}
+  if(t.closest('[data-ackall]')){priceAlerts().forEach(function(x){localAck[x.id]=1});saveAck();return}
+  if(t.closest('[data-ackshow]')){alertShowAck=!alertShowAck;renderAlerts()}
+});
+
+
+/* ---------- data from Supabase (read-only, Office staff only) ---------- */
+var sb=DrPool.sb,BR={techs:{},weeks:[]};
+function techLabel(r){return BR.techs[r]||cfg.techs[r]||''}
+function rowToInv(r){
+  var its=(r.supplier_invoice_lines||[]).slice().sort(function(a,b){return (a.line_no||0)-(b.line_no||0)}).map(function(l){
+    var o={cat:l.category||'other',desc:l.description||'',ext:Number(l.ext)||0,label:l.label||l.description||'',price:Number(l.price)||0,qty:Number(l.qty)||0,sku:l.sku||'',um:l.um||''};
+    if(l.product_group)o.group=l.product_group;
+    if(l.gpu!=null&&Number(l.gpu)>0)o.gpu=Number(l.gpu);
+    return o;
+  });
+  var v={date:String(r.invoice_date||'').slice(0,10),invoice:r.invoice_no,order:r.order_no||'',route:r.route_no==null?'?':String(r.route_no),total:Number(r.total)||0,items:its};
+  if(r.supplier==='Proline')v.vendor='Proline';
+  if(r.source==='sheet'||r.source==='stock')v.source=r.source;
+  if(r.note)v.note=r.note;
+  if(r.po_text)v.po=r.po_text;
+  return v;
+}
+async function loadAll(){
+  var inv=[],from=0,step=500;
+  for(;;){
+    var q=await sb.from('supplier_invoices').select('supplier,invoice_no,order_no,invoice_date,route_no,total,source,note,po_text,supplier_invoice_lines(line_no,sku,description,um,qty,price,ext,category,label,product_group,gpu)').order('invoice_date',{ascending:false}).order('invoice_no').range(from,from+step-1);
+    if(q.error)throw q.error;
+    inv=inv.concat(q.data||[]);if(!q.data||q.data.length<step)break;from+=step;
+  }
+  invoices=inv.map(rowToInv);loaded.inv=true;
+  var t=await sb.from('technicians').select('route_no,name,active');
+  if(!t.error)(t.data||[]).forEach(function(x){if(x.active&&(x.route_no!=null||x.name==='Geffet'))BR.techs[String(x.route_no==null?0:x.route_no)]=x.name});
+  var st=await sb.from('tally_settings').select('key,value');
+  if(!st.error)(st.data||[]).forEach(function(x){
+    if(x.key==='config'&&x.value){var d=x.value;cfg={bottlePrice:Number(d.bottlePrice)>0?Number(d.bottlePrice):4.36,perBox:Number(d.perBox)>0?Number(d.perBox):4,techs:d.techs||{},aliases:d.aliases||{}}}
+    if(x.key==='alerts'&&x.value){remoteAck=x.value.ack||{}}
+  });
+  mergeAck();
+  var w=await sb.from('v_route_summary').select('week_of,route_no,tech_name,stops,pools,income');
+  if(!w.error){
+    var m={};(w.data||[]).forEach(function(x){
+      var k=String(x.week_of).slice(0,10),wk=m[k]||(m[k]={week:addDaysISO(k,1),brainWeek:k,src:'brain',routes:{}});
+      wk.routes[String(x.route_no)]={name:x.tech_name,pools:Number(x.pools)||0,income:Number(x.income)||0,stops:Number(x.stops)||0};
+    });
+    BR.weeks=Object.keys(m).sort().map(function(k){return m[k]});
+  }
+}
+function addDaysISO(iso,n){var d=new Date(iso+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
+/* ---------- invoice search ---------- */
+function srchRows(q){
+  var toks=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
+  if(!toks.length)return [];
+  return invoices.filter(function(v){
+    var hay=[v.invoice,v.order,v.route,'route '+v.route,techLabel(v.route),(v.route==='0'?'geffet jeff':''),v.note,isPro(v)?'proline':(isStock(v)?'stock':'scp'),v.date].join(' ').toLowerCase();
+    return toks.every(function(t){return hay.indexOf(t)>=0});
+  }).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0});
+}
+function drawSearch(){
+  var el=document.getElementById('srchRes'),q=document.getElementById('srchIn').value.trim();
+  if(!q){el.hidden=true;el.innerHTML='';return}
+  var r=srchRows(q),h='<div class="dhead"><div><h2>Search</h2><p>'+r.length+' match'+(r.length===1?'':'es')+' for &ldquo;'+esc(q)+'&rdquo; in all months, SCP and Proline'+(r.length>40?' (showing the newest 40)':'')+'</p></div><button class="btn" type="button" data-sr="close">Close</button></div>';
+  if(!r.length)h+='<div class="empty">No invoice matches &ldquo;'+esc(q)+'&rdquo;. Try part of the invoice number, a route number or a tech name.</div>';
+  else h+='<div class="misslist">'+r.slice(0,40).map(function(v){
+    return '<button type="button" class="srow" data-sr="'+esc(v.invoice)+'"><span class="mono">'+(isStock(v)?'From stock':esc(v.invoice))+'</span>'+(isPro(v)?'<span class="pill neutral">Proline</span>':'<span class="pill neutral">SCP</span>')+'<span>'+esc(dlabel(v.date))+' '+esc(String(v.date||'').slice(0,4))+'</span><span>Route '+esc(v.route)+techOf(v.route)+'</span><span class="mono">'+(isStock(v)?'':money(v.total))+'</span></button>';
+  }).join('')+'</div>';
+  el.innerHTML=h;el.hidden=false;
+}
+function openFound(id){
+  var v=invoices.filter(function(x){return x.invoice===id})[0];if(!v)return;
+  monthSel=String(v.date||'').slice(0,7);dateSel='all';vendSel='all';if(tab==='analytics')tab=lastTab||'route';
+  detail={kind:'inv',id:id};
+  document.getElementById('srchIn').value='';drawSearch();
+  render();renderDetail(true);
+}
+document.getElementById('srchIn').addEventListener('input',drawSearch);
+document.getElementById('srchIn').addEventListener('keydown',function(e){
+  if(e.key==='Escape'){this.value='';drawSearch();this.blur()}
+  if(e.key==='Enter'){var f=document.querySelector('#srchRes [data-sr]:not([data-sr="close"])');if(f){e.preventDefault();openFound(f.getAttribute('data-sr'))}}
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    var t=e.target,tn=t&&t.tagName;if(tn==='INPUT'||tn==='TEXTAREA'||tn==='SELECT'||(t&&t.isContentEditable))return;
+    e.preventDefault();var i=document.getElementById('srchIn');i.focus();i.select();
+  }
+});
+document.addEventListener('click',function(e){
+  var s=e.target.closest('[data-sr]');
+  if(s){var k=s.getAttribute('data-sr');if(k==='close'){document.getElementById('srchIn').value='';drawSearch()}else openFound(k);return}
+  var vb=e.target.closest('[data-view]');
+  if(vb){tab=vb.getAttribute('data-view')==='analytics'?'analytics':(lastTab||'route');detail=null;render()}
+});
+
+/* ---------- enlarge a chart ---------- */
+var ovl=null,ovFrom=null,ovTitle='';
+function closeOv(){
+  if(!ovl)return;
+  var o=ovl,t=ovTitle;ovl=null;
+  document.removeEventListener('keydown',ovKey,true);
+  o.remove();document.body.style.overflow='';
+  var back=ovFrom&&document.body.contains(ovFrom)?ovFrom:Array.prototype.filter.call(document.querySelectorAll('.fig[data-ft]'),function(x){return x.getAttribute('data-ft')===t})[0];
+  if(back)try{back.focus()}catch(x){}
+}
+function ovKey(e){
+  if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeOv();return}
+  if(e.key==='Tab'&&ovl){var f=ovl.querySelectorAll('button');if(f.length){e.preventDefault();f[0].focus()}}
+}
+function openOv(card){
+  if(ovl)return;
+  var rect=card.getBoundingClientRect();ovFrom=card;ovTitle=card.getAttribute('data-ft')||'';
+  var o=document.createElement('div');o.className='ovl';
+  var clone=card.cloneNode(true);clone.removeAttribute('tabindex');clone.removeAttribute('role');clone.removeAttribute('aria-label');clone.removeAttribute('data-ft');
+  o.innerHTML='<div class="ovp" role="dialog" aria-modal="true" aria-label="'+esc(ovTitle)+'"><button type="button" class="ovx" aria-label="Close chart">&times;</button></div>';
+  var p=o.firstChild;p.appendChild(clone);
+  o.addEventListener('click',function(e){if(e.target===o||e.target.closest('.ovx'))closeOv()});
+  document.body.appendChild(o);document.body.style.overflow='hidden';ovl=o;
+  document.addEventListener('keydown',ovKey,true);
+  p.querySelector('.ovx').focus();
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!reduce&&p.animate){
+    var r2=p.getBoundingClientRect(),dx=rect.left+rect.width/2-(r2.left+r2.width/2),dy=rect.top+rect.height/2-(r2.top+r2.height/2),sx=rect.width/r2.width,sy=rect.height/r2.height;
+    p.animate([{transform:'translate('+dx+'px,'+dy+'px) scale('+sx+','+sy+')',opacity:.4},{transform:'none',opacity:1}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'});
+    o.animate([{opacity:0},{opacity:1}],{duration:200});
+  }
+}
+document.addEventListener('click',function(e){
+  var c=e.target.closest('.fig[data-ft]');if(c&&!c.closest('.ovl'))openOv(c);
+});
+document.addEventListener('keydown',function(e){
+  if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('fig')&&e.target.hasAttribute('data-ft')){e.preventDefault();openOv(e.target)}
+});
+
+render();
+(async function(){
+  var me=await DrPool.requireLogin({office:true});
+  if(!me)return;
+  DrPool.topBar('tally');
+  try{await loadAll()}catch(e){
+    document.getElementById('panel').innerHTML='<div class="alert"><div><b>The tally could not be loaded</b><p>'+esc((e&&e.message)||'Check your connection and reload. If this keeps happening, ask Daniel.')+'</p></div></div>';
+    return;
+  }
+  render();
+})();
+})();
+</script>
+
+</body></html>

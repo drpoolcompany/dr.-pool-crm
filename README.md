@@ -5,6 +5,7 @@ Static site (GitHub Pages) for Dr. Pool staff. Sign in with your username and pa
 - `index.html`: sign-in and app launcher
 - `crm/`: team CRM (your tasks, the Office view, customers, jobs)
 - `board/`: shared inbox Chalkboard (Office access)
+- `tally/`: SCP and Proline chemical invoices by route, search, price alerts and analytics (Office access, read-only; invoices are added from the Claude tally page and copied here automatically)
 - `shared/drpool.js`: Supabase connection and sign-in
 
 Data lives in Supabase and is protected by row-level security. The key in `shared/drpool.js` is the public

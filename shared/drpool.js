@@ -11,7 +11,7 @@
   });
 
   const toEmail = u => { u = String(u || '').trim().toLowerCase(); if (u.includes('@')) return u; return (ALIASES[u] || u) + '@' + LOGIN_DOMAIN; };
-  const root = () => location.pathname.replace(/\/(crm|board|whatsapp|prospects|brain)\/?(index\.html)?$/, '/').replace(/index\.html$/, '');
+  const root = () => location.pathname.replace(/\/(crm|board|whatsapp|prospects|brain|tally)\/?(index\.html)?$/, '/').replace(/index\.html$/, '');
 
   let ME = null;
   async function loadMe() {
@@ -65,6 +65,7 @@
       ${ME && ME.office ? `<a href="${root()}whatsapp/" ${current === 'whatsapp' ? 'aria-current="page"' : ''}>WhatsApp</a>` : ''}
       ${ME && ME.office ? `<a href="${root()}brain/" ${current === 'brain' ? 'aria-current="page"' : ''}>Brain</a>` : ''}
       ${ME && ME.office ? `<a href="${root()}prospects/" ${current === 'prospects' ? 'aria-current="page"' : ''}>Prospects</a>` : ''}
+      ${ME && ME.office ? `<a href="${root()}tally/" ${current === 'tally' ? 'aria-current="page"' : ''}>Tally</a>` : ''}
       <span class="sp"></span>
       ${isOwner() ? `<label class="vw">View <select id="drview"><option value="all">Everything</option><option value="mine">Mine + Office</option></select></label>` : ''}
       <button type="button" id="drme" class="me"></button>`;
