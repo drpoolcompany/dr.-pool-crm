@@ -46,6 +46,7 @@ async function load(){
   const qb=['qb_customers','qb_invoices','qb_payments','bg_customers','bg_payments'].reduce((a,d)=>a+Number((S[d]||{}).rows||0),0);
   const stages={};pr.data.forEach(p=>stages[p.stage]=(stages[p.stage]||0)+1);
   app.innerHTML=`<h1>Dr. Pool Brain</h1><p class="sub">Live from the shared database · ${new Date().toLocaleTimeString()} · <button id="rf">Refresh</button></p>
+  <h2>Find a client</h2><form id="cf" style="display:flex;gap:8px;flex-wrap:wrap"><input id="cq" placeholder="Name, email, address or account #" style="flex:1;min-width:220px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--card);color:var(--ink)"><button>Search</button></form><div id="cr"></div>
   <h2>Every tool and what it holds</h2><div class="grid">
   ${card('Customers',"Names, addresses, emails, rates — the base for everything",n('customers'),S.customers&&S.customers.last_change,st1('customers',30))}
   ${card('Route schedule','Weekly route stops: CRM, Route Planner, Dashboard read this',n('route_stops')+' stops',S.route_stops&&S.route_stops.last_change,st1('route_stops',8),'Only the week of Oct 25 is loaded')}
@@ -66,8 +67,49 @@ async function load(){
   <h2>Tasks sent between tools</h2><div class="sub">${waOpenTasks} open from WhatsApp · ${rpOpen} open from Route Planner</div>
   ${(()=>{const L=tasks.filter(t=>t.source==='whatsapp'||t.source==='route_planner').slice(0,10);return L.length?`<table><tr><th>From</th><th>To</th><th>Note</th><th>Status</th><th>When</th></tr>${L.map(t=>`<tr><td>${esc(t.source)}</td><td>${esc(t.assignee)}</td><td>${esc((t.note||'').slice(0,80))}</td><td>${t.done?'done':'open'}</td><td>${esc(ago(t.created_at))}</td></tr>`).join('')}</table>`:'<p class="sub">None yet. When you press "Send to CRM" on the WhatsApp or Route Planner page, it shows up here and in the assignee\'s CRM list.</p>'})()}`;
   document.getElementById('rf').onclick=load;
+  clientSearch();
   if(['daniel','david'].includes(me.username)) editors(); else app.insertAdjacentHTML('beforeend','<h2>Edit schedule &amp; dashboard</h2><p class="sub">Only Daniel and David can edit the route schedule and the Pool Boys vehicles.</p>');
  }catch(e){app.innerHTML=`<h1>Dr. Pool Brain</h1><div class="msg">Could not load: ${esc(e.message)} <button id="rf">Try again</button></div>`;document.getElementById('rf').onclick=load}
+}
+
+function clientSearch(){
+ const f=document.getElementById('cf'),out=document.getElementById('cr');
+ const lk=v=>String(v).replace(/[\\%_,()]/g,m=>m===','||m==='('||m===')'?' ':'\\'+m);
+ const money=n=>n==null?'—':'$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+ const fd=d=>d?new Date(String(d).slice(0,10)+'T12:00').toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}):'—';
+ async function card(id){
+  out.innerHTML='<p class="sub">Loading…</p>';
+  const [c,sch,tk,em,wa,cl]=await Promise.all([
+   sb.from('v_customer_360').select('*').eq('id',id).maybeSingle(),
+   sb.from('v_schedule_current').select('week_of,route_no,tech_name,day,slot,price,service_code,flag').eq('customer_id',id),
+   sb.from('tasks').select('type,assignee,note,done,due_at,source,created_at').eq('workspace','team').eq('customer_id',id).order('created_at',{ascending:false}).limit(10),
+   sb.from('chalkboard_items').select('title,bucket,detail,at,done,link,assigned_to').eq('customer_id',id).order('at',{ascending:false}).limit(8),
+   sb.from('wa_threads').select('group_name,started_at,done').eq('customer_id',id).order('started_at',{ascending:false}).limit(5),
+   sb.from('calls').select('summary,started_at,direction').eq('customer_id',id).order('started_at',{ascending:false}).limit(5)]);
+  const x=c.data; if(!x){out.innerHTML='<div class="msg">Client not found.</div>';return}
+  let emails=em.data||[];
+  if(x.email){const e2=await sb.from('chalkboard_items').select('title,bucket,detail,at,done,link,assigned_to').ilike('contact_email',lk(x.email)).order('at',{ascending:false}).limit(8);
+   if(e2.data){const seen=new Set(emails.map(r=>r.title+r.at));emails=emails.concat(e2.data.filter(r=>!seen.has(r.title+r.at)))}}
+  const li=(a,fn,empty)=>a&&a.length?'<ul style="margin:4px 0;padding-left:18px">'+a.map(r=>'<li>'+fn(r)+'</li>').join('')+'</ul>':'<div class="sub">'+empty+'</div>';
+  const billing=(x.qb_balance==null&&x.autopay==null&&x.last_paid_on==null)?'<div class="sub">Billing: no QuickBooks / Biller Genie report loaded yet</div>':'<div>Balance '+money(x.qb_balance)+' · Autopay '+(x.autopay==null?'not loaded':x.autopay?'yes':'no')+' · Last paid '+fd(x.last_paid_on)+'</div>';
+  out.innerHTML=`<div class="card" style="margin-top:10px"><h3><span>${esc(x.name)}</span><span class="sub">#${esc(x.account_no)} · ${esc(x.status)}</span></h3>
+   <div>${x.email?`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`:'<span class="sub">no email on file</span>'}${x.phone?' · '+esc(x.phone):''}</div>
+   <div class="sub">${esc([x.address,x.city].filter(Boolean).join(', '))}</div>
+   <div>Rate: <b>${money(x.monthly_rate)}</b>/month${x.service_level?' · '+esc(x.service_level):''}</div>${billing}
+   <h4 style="margin:10px 0 2px">Route</h4>${li(sch.data,r=>`Route ${esc(r.route_no)} (${esc(r.tech_name)}) · ${esc(r.day)} stop ${esc(r.slot)}${r.price!=null?' · '+money(r.price):''}${r.flag?' · '+esc(r.flag):''}`,'Not on the loaded schedule week'+(x.route_no?' (CRM says route '+esc(x.route_no)+')':''))}
+   <h4 style="margin:10px 0 2px">CRM tasks</h4>${li(tk.data,r=>`${r.done?'✓':'○'} ${esc(r.type)} → ${esc(r.assignee)}${r.due_at?' · due '+esc(fd(r.due_at)):''}${r.note?' · '+esc(r.note.slice(0,100)):''}${r.source?' <span class="sub">('+esc(r.source)+')</span>':''}`,'No team tasks on this client')}
+   <h4 style="margin:10px 0 2px">Recent emails / inbox items</h4>${li(emails,r=>`${r.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>`:esc(r.title)} <span class="sub">${esc(r.bucket)} · ${esc(fd(r.at))}${r.done?' · done':''}</span>`,'No inbox items matched')}
+   <h4 style="margin:10px 0 2px">WhatsApp reports</h4>${li(wa.data,r=>esc(r.group_name)+' · '+esc(fd(r.started_at))+(r.done?' · handled':''),'None')}
+   <h4 style="margin:10px 0 2px">Calls</h4>${li(cl.data,r=>esc(fd(r.started_at))+' · '+esc((r.summary||'').slice(0,120)),'None')}</div>`;
+ }
+ f.onsubmit=async ev=>{ev.preventDefault();const q=document.getElementById('cq').value.trim();if(q.length<2){out.innerHTML='<p class="sub">Type at least 2 characters.</p>';return}
+  out.innerHTML='<p class="sub">Searching…</p>';const t=lk(q);
+  const r=await sb.from('customers').select('id,name,address,city,account_no,status').or(`name.ilike.%${t}%,email.ilike.%${t}%,address.ilike.%${t}%,account_no.ilike.%${t}%`).order('name').limit(15);
+  if(r.error){out.innerHTML='<div class="msg">'+esc(r.error.message)+'</div>';return}
+  if(!r.data.length){out.innerHTML='<p class="sub">No client found.</p>';return}
+  if(r.data.length===1){card(r.data[0].id);return}
+  out.innerHTML='<table>'+r.data.map(c=>`<tr><td><a href="#" data-id="${esc(c.id)}">${esc(c.name)}</a></td><td>${esc([c.address,c.city].filter(Boolean).join(', '))}</td><td>#${esc(c.account_no)} ${esc(c.status)}</td></tr>`).join('')+'</table>';
+  out.querySelectorAll('a[data-id]').forEach(a=>a.onclick=e=>{e.preventDefault();card(a.dataset.id)});};
 }
 
 async function editors(){
