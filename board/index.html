@@ -18,6 +18,7 @@
   --c-action: #a86a00; --c-pay: #1d7a46; --c-ok: #137a74; --c-ask: #b4591a; --c-lead: #2f63a8;
   --c-cancel: #b83a3a; --c-warn: #a8386f; --c-admin: #6a4fb0; --c-misc: #6b6450;
   --pop: #fffef9; --shadow: rgba(60,40,10,.22);
+  --fresh-bg: #fff4c9; --fresh-edge: #e6a817; --fresh-glow: rgba(240,176,20,.45); --fresh-ink: #8a5a00; --fresh-tag: #ffe28a;
   --font-display: "Caveat Brush", "Segoe Print", "Comic Sans MS", cursive;
   --font-body: "Patrick Hand", "Segoe Print", "Comic Sans MS", cursive;
   --font-label: "Patrick Hand SC", "Patrick Hand", "Segoe Print", cursive;
@@ -31,6 +32,7 @@
     --c-action: #f0b54a; --c-pay: #6fd39a; --c-ok: #5fd0c6; --c-ask: #f39a5e; --c-lead: #8db6f0;
     --c-cancel: #f08484; --c-warn: #f08cbf; --c-admin: #b9a4f2; --c-misc: #cfc6a8;
     --pop: #2c3a35; --shadow: rgba(0,0,0,.45);
+    --fresh-bg: #3a3620; --fresh-edge: #e6a817; --fresh-glow: rgba(240,176,20,.35); --fresh-ink: #f6d36a; --fresh-tag: #5a4a14;
     color-scheme: dark;
   }
 }
@@ -54,6 +56,7 @@ h1 { margin: 0; font: 400 clamp(38px, 7vw, 60px)/1 var(--font-display); letter-s
 .stats b { font: 400 34px/1 var(--font-display); margin-right: 6px; }
 .stats .s-action b { color: var(--c-action); }
 .stats .s-pay b { color: var(--c-pay); }
+.stats .s-new b { color: var(--fresh-ink); }
 .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 12px 0 4px; }
 .filters { display: flex; flex-wrap: wrap; gap: 6px; }
 button { font: inherit; color: var(--chalk); background: transparent; cursor: pointer; }
@@ -71,6 +74,8 @@ section h2 .sum { font-family: var(--font-label); font-size: 20px; margin-left: 
 .none { margin: 8px 0 0; color: var(--chalk-dim); padding-left: 4px; }
 ul { list-style: none; margin: 0; padding: 0; }
 li.item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 10px 2px; border-bottom: 1px dashed var(--dash); }
+li.item.fresh { background: var(--fresh-bg); border: 2px solid var(--fresh-edge); border-radius: 10px; padding: 10px 8px; margin: 6px 0; box-shadow: 0 0 10px 2px var(--fresh-glow); }
+.newtag { color: var(--fresh-ink); background: var(--fresh-tag); border: 2px solid var(--fresh-edge); border-radius: 12px; padding: 0 9px; transform: rotate(-3deg); font-weight: 700; }
 /* 40px tap target, 30px drawn box */
 .check { width: 40px; height: 40px; padding: 0; border: 0; position: relative; }
 .check::before { content: ""; position: absolute; left: 5px; top: 5px; width: 30px; height: 30px; border: 3px solid var(--accent); border-radius: 5px; transform: rotate(-2deg); box-sizing: border-box; }
@@ -120,7 +125,11 @@ li.done .check::before { border-color: var(--chalk-dim); }
   section h2 { font-size: 26px; }
   .sweep { text-align: left; }
 }
-@media (prefers-reduced-motion: no-preference) { .check::before { transition: background .15s; } }
+@media (prefers-reduced-motion: no-preference) {
+  .check::before { transition: background .15s; }
+  li.item.fresh { animation: freshGlow 2.6s ease-in-out infinite; }
+  @keyframes freshGlow { 0%, 100% { box-shadow: 0 0 6px 1px var(--fresh-glow); } 50% { box-shadow: 0 0 16px 5px var(--fresh-glow); } }
+}
 </style>
 </head>
 <body>
@@ -167,6 +176,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
   const STATUS = { open: 'Open', in_progress: 'In progress', waiting: 'Waiting' };
   const TZ = 'America/New_York';
   const FKEY = 'drpool-board-filter';
+  const FRESH_MS = 60 * 60 * 1000;   // items added in the last hour glow with a NEW badge
 
   let rows = [], meta = null, staff = [], loaded = false, busy = false, again = false, lastLoad = 0;
   let filter = 'all';
@@ -187,6 +197,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
   function ageDays(iso) { const d = new Date(iso); if (isNaN(d)) return 0; return Math.round((Date.parse(dayKey(new Date())) - Date.parse(dayKey(d))) / 86400000); }
   const ts = iso => { const t = Date.parse(iso); return isNaN(t) ? 0 : t; };
   const money = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isFresh = it => !it.done && Date.now() - ts(it.created_at || it.at) < FRESH_MS;
   const isLink = l => typeof l === 'string' && l.indexOf('https://') === 0;
   const plain = it => it.title + (it.detail ? ' - ' + it.detail : '') + (it.amount != null ? ' (' + money(it.amount) + ')' : '') + ' [' + fmtTime(it.at) + ']' + (it.assigned_to ? ' -> ' + it.assigned_to : '');
   function copy(text, ok) {
@@ -314,7 +325,8 @@ li.done .check::before { border-color: var(--chalk-dim); }
 
   /* ---------- render ---------- */
   function row(it, accent) {
-    const li = el('li', 'item' + (it.done ? ' done' : ''));
+    const fresh = isFresh(it);
+    const li = el('li', 'item' + (it.done ? ' done' : '') + (fresh ? ' fresh' : ''));
     li.style.setProperty('--accent', accent);
     const cb = el('button', 'check'); cb.type = 'button'; cb.setAttribute('role', 'checkbox');
     cb.setAttribute('aria-checked', it.done ? 'true' : 'false'); cb.setAttribute('aria-label', (it.done ? 'Reopen: ' : 'Mark done: ') + it.title);
@@ -327,7 +339,9 @@ li.done .check::before { border-color: var(--chalk-dim); }
     if (it.acct || it.cust) main.appendChild(el('div', 'cust', [it.acct ? '#' + it.acct : '', it.cust || ''].filter(Boolean).join(' · ')));
     if (it.detail) main.appendChild(el('div', 'detail', it.detail));
     const m = el('div', 'meta');
+    if (fresh) m.appendChild(el('span', 'newtag', 'NEW'));
     m.appendChild(el('span', null, fmtTime(it.at)));
+    if (Array.isArray(it.tags) && it.tags.length) m.appendChild(el('span', null, 'Tagged: ' + it.tags.join(', ')));
     const age = ageDays(it.at);
     if (!it.done && age >= 1) m.appendChild(el('span', 'old' + (age >= 3 ? ' stale' : ''), age === 1 ? 'from yesterday' : 'still open: ' + age + ' days'));
     if (it.assigned_to) { const w = el('span', 'who', it.assigned_to); w.title = 'Assigned to ' + it.assigned_to; m.appendChild(w); }
@@ -353,7 +367,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
     if (popEl) closePop();
     document.querySelectorAll('.fchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === filter)));
     const vis = rows.filter(passes);
-    const open = vis.filter(i => !i.done).sort((a, b) => ts(a.at) - ts(b.at));
+    const open = vis.filter(i => !i.done).sort((a, b) => ts(b.at) - ts(a.at));
     const done = vis.filter(i => i.done).sort((a, b) => ts(b.done_at) - ts(a.done_at));
     const host = $('sections'); host.textContent = '';
     let payOpen = 0;
@@ -382,6 +396,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
     const stat = (cls, n, label) => { const d = el('div', cls); d.appendChild(el('b', null, n)); d.appendChild(document.createTextNode(label)); st.appendChild(d); };
     if (loaded) {
       stat('s-open', String(open.length), 'open');
+      const fc = open.filter(isFresh).length; if (fc) stat('s-new', String(fc), 'new this hour');
       stat('s-action', String(open.filter(i => i.bucket === 'action').length), 'need action');
       stat('s-pay', money(payOpen), 'payments to log');
     }
@@ -398,7 +413,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
   document.addEventListener('drpool:view', e => { filter = e.detail === 'mine' ? 'mine' : 'all'; try { localStorage.setItem(FKEY, filter); } catch (er) {} render(); });
   $('copyAll').addEventListener('click', () => {
     const lines = [];
-    const vis = rows.filter(i => !i.done && passes(i));
+    const vis = rows.filter(i => !i.done && passes(i)).sort((a, b) => ts(b.at) - ts(a.at));
     BUCKETS.forEach(b => {
       const l = vis.filter(i => i.bucket === b.key); if (!l.length) return;
       lines.push(b.label.toUpperCase()); l.forEach(i => lines.push('- ' + plain(i)));
