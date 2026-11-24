@@ -1,7 +1,7 @@
 /* Dr. Pool Team CRM — tasks, customers, jobs on Supabase (workspace 'team'). */
 (async function () {
 'use strict';
-const T = { call: 'Return call', po: 'Make PO', est: 'Send estimate', appr: 'Get approval', inv: 'Send invoice', pay: 'Check payment', visit: 'Site visit', other: 'Other', close: 'Close loop' };
+const T = { call: 'Return call', po: 'Make PO', est: 'Send estimate', appr: 'Get approval', inv: 'Send invoice', pay: 'Check payment', visit: 'Site visit', other: 'Other', close: 'Close loop', email: 'Respond to email' };
 const KINDS = { repair: 'Repair', renovation: 'Renovation', service: 'Service', equipment: 'Equipment', other: 'Other' };
 const PRI = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
 const DOCST = { PO: ['Draft', 'Sent', 'Received'], Estimate: ['Draft', 'Sent', 'Approved', 'Declined'], Invoice: ['Draft', 'Sent', 'Paid'] };
@@ -9,7 +9,7 @@ const PM = ['Check', 'Cash', 'Card', 'Zelle', 'ACH', 'Other'];
 const STAGES = ['Site visit', 'Demo', 'Plumbing', 'Electrical', 'Tile', 'Coping / deck', 'Plaster / finish', 'Equipment', 'Fill & start-up', 'Punch list', 'Done'];
 const PEOPLE = ['Daniel', 'Juliana', 'Malu', 'David', 'Geffet', 'Aldo', 'Office'];
 const WS = 'team';
-const STEPS = ['call', 'po', 'est', 'appr', 'inv', 'pay', 'visit', 'other'];
+const STEPS = ['call', 'po', 'est', 'appr', 'inv', 'pay', 'visit', 'email', 'other'];
 const stepOf = t => STEPS.includes(t.type) ? t.type : 'other';
 const FD = { all: 'All open tasks', pnd: 'Paid, work not done', dnp: 'Work done, not paid', pp: 'Partial payment', reno: 'Renovations' };
 const FDH = { all: 'Every open task you can see.', pnd: 'Paid in full, but the work is still open.', dnp: 'Work is done and no payment has come in.', pp: 'Some money in, balance still owed.', reno: 'Tasks on renovation jobs.' };
@@ -23,6 +23,8 @@ const main = $('#main');
 
 /* ---------- helpers ---------- */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* escaped text with clickable links (Outlook links read "Open email") */
+const rich = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => { const clean = u.replace(/&amp;/g, '&'); return `<a href="${u}" target="_blank" rel="noopener">${/outlook\.office/i.test(clean) ? 'Open email' : esc(clean.replace(/^https?:\/\//, '').slice(0, 50))}</a>`; });
 const $$ = n => (n < 0 ? '-$' : '$') + Math.abs(+n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dayKey = d => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
 const today = () => dayKey(new Date());
@@ -150,13 +152,13 @@ function parseHash() {
   const h = location.hash.replace(/^#\/?/, '');
   const [path, qs] = h.split('?');
   const parts = path.split('/').filter(Boolean);
-  return { v: parts[0] || 'tasks', id: parts[1] ? decodeURIComponent(parts[1]) : null, qs: new URLSearchParams(qs || '') };
+  return { v: parts[0] || 'jobs', id: parts[1] ? decodeURIComponent(parts[1]) : null, qs: new URLSearchParams(qs || '') };
 }
 function tabs() {
   const r = parseHash(), cur = r.v === 'c' ? 'customers' : r.v === 'j' || r.v === 'new' ? 'jobs' : r.v;
   const n = S.taskCount;
-  const L = [['tasks', officeView() ? 'Team tasks' : 'My tasks'], ['customers', 'Customers'], ['jobs', isOffice() ? 'Jobs' : 'My jobs'], ['calls', 'Calls']];
-  $('#tabs').innerHTML = L.map(([k, l]) => `<a href="#/${k}" class="${cur === k ? 'on' : ''}"${cur === k ? ' aria-current="page"' : ''}>${l}${k === 'tasks' && n ? `<i>${n}</i>` : ''}</a>`).join('');
+  const L = [['jobs', isOffice() ? 'Jobs' : 'My jobs'], ['customers', 'Customers'], ['calls', 'Calls']];
+  $('#tabs').innerHTML = L.map(([k, l]) => `<a href="#/${k}" class="${cur === k ? 'on' : ''}"${cur === k ? ' aria-current="page"' : ''}>${l}${k === 'jobs' && n ? `<i>${n}</i>` : ''}</a>`).join('');
   $('#hsub').textContent = officeView() ? 'Everything in motion' : me.name;
 }
 let CUR = null; // what the open page is about, for "Message about this" / "Log a call"
@@ -166,14 +168,14 @@ async function route(opts = {}) {
   const r = parseHash();
   tabs();
   try {
-    if (r.v === 'tasks') await viewTasks();
+    if (r.v === 'tasks') { location.hash = '#/jobs'; rendering = false; return; }
     else if (r.v === 'customers') await viewCustomers();
     else if (r.v === 'c' && r.id) await viewCustomer(r.id);
     else if (r.v === 'jobs') await viewJobs();
     else if (r.v === 'j' && r.id) await viewJob(r.id);
     else if (r.v === 'new') await viewNewJob(r.qs.get('c'));
     else if (r.v === 'calls') await viewCalls();
-    else { location.hash = '#/tasks'; }
+    else { location.hash = '#/jobs'; }
   } catch (e) {
     main.innerHTML = `<p class="err">Could not load this page. ${esc(errMsg(e))}</p><button class="btn o" type="button" data-a="retry">Try again</button>`;
   }
@@ -197,7 +199,7 @@ function taskCard(t, opts = {}) {
     <div class="ln"><span class="ty">${esc(T[t.type] || t.type)}</span>${t.assignee === 'Office' ? '<span class="b office">Office</span>' : ''}${priB(t.priority)}${j && j.kind === 'renovation' ? '<span class="b reno">Renovation</span>' : ''}${fBadge(m)}${srcB(t)}</div>
     ${c ? `<div class="ln"><b>${esc(c.name)}</b>${c.account_no ? `<span class="sub">#${esc(c.account_no)}</span>` : ''}</div><div class="ln">${mapLink(c)}</div>` : ''}
     ${j ? `<div class="ln"><a href="#/j/${esc(j.id)}">${esc(j.title)}</a>${j.open ? '' : '<span class="b ok">Job closed</span>'}</div>` : ''}
-    ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
+    ${t.note ? `<div class="note">${rich(t.note)}</div>` : ''}
     ${(t.tags || []).length ? `<div class="ln">${t.tags.map(g => `<span class="tag">${esc(g)}</span>`).join('')}</div>` : ''}
     ${msgs.length ? `<div class="msgs">${msgs.slice(-3).map(m => `<div class="msg">${esc(m.text)}<span class="sub">${esc(m.by || '')} · ${m.at ? esc(fmtAt(m.at)) : ''}</span></div>`).join('')}${msgs.length > 3 ? `<span class="sub">${msgs.length - 3} earlier notes on the job page</span>` : ''}</div>` : ''}
     <div class="acts">${canAct ? `<button type="button" class="btn o sm" data-a="note" data-x="${esc(t.id)}">Add note</button>` : ''}<button type="button" class="btn o sm" data-a="dmtask" data-x="${esc(t.id)}">Message about this</button></div>${canAct ? '<div class="notebox" hidden></div>' : ''}
@@ -347,15 +349,29 @@ async function viewCustomer(id) {
 }
 
 /* ---------- Jobs ---------- */
+async function openTaskCount() {
+  try {
+    let qy = sb.from('tasks').select('id', { count: 'exact', head: true }).eq('workspace', WS).eq('done', false);
+    if (isOwner() && !officeView()) qy = qy.or(`assignee.in.("${me.name.replace(/"/g, '')}","Office"),assignee_staff_id.eq.${me.id}`);
+    const r = await qy; S.taskCount = r && r.count != null ? r.count : S.taskCount;
+  } catch (e) { /* badge only */ }
+}
 async function viewJobs() {
   const office = isOffice();
+  openTaskCount().then(tabs);
   let qy = sb.from('jobs').select(JOB_SEL + `,customer:customers!jobs_customer_id_fkey(${CUST_MIN})`).eq('workspace', WS);
   if (S.jf === 'open') qy = qy.eq('open', true); else if (S.jf === 'closed') qy = qy.eq('open', false);
   if (S.jk) qy = qy.eq('kind', S.jk);
-  const rows = await q(qy.order('created_at', { ascending: false }).limit(300));
+  let rows = await q(qy.order('created_at', { ascending: false }).limit(300));
+  const openBy = j => (j.tasks || []).filter(t => !t.done).map(t => t.assignee).filter(Boolean);
+  const people = office && S.jf !== 'closed' ? [...new Set(rows.flatMap(openBy))].sort() : [];
+  if (S.who && !people.includes(S.who)) S.who = '';
+  if (S.who) rows = rows.filter(j => openBy(j).includes(S.who));
+  const whoChips = people.length ? `<div class="chips" role="group" aria-label="Filter by person"><button class="chip ${S.who ? '' : 'on'}" data-a="who" data-x="">Everyone</button>${people.map(p => `<button class="chip ${S.who === p ? 'on' : ''}" data-a="who" data-x="${esc(p)}">${esc(p)}<i>${rows.length && S.who === p ? rows.length : ''}</i></button>`).join('')}</div>` : '';
   const f = (k, l) => `<button class="chip ${S.jf === k ? 'on' : ''}" data-a="jf" data-x="${k}">${l}</button>`;
-  main.innerHTML = `<div class="jh" style="justify-content:space-between"><h2>${office ? 'Jobs' : 'Jobs with your tasks'}</h2>${office ? '<a class="btn" href="#/new">New job</a>' : ''}</div>
+  main.innerHTML = `<div class="jh" style="justify-content:space-between"><h2>${office ? (officeView() ? 'Everything in motion' : 'Jobs') : 'Jobs with your tasks'}</h2>${office ? '<a class="btn" href="#/new">New job</a>' : ''}</div>
   <div class="chips" style="margin-top:12px">${f('open', 'Open')}${f('closed', 'Closed')}${f('all', 'All')}</div>
+  ${whoChips}
   <div class="chips"><button class="chip ${S.jk ? '' : 'on'}" data-a="jk" data-x="">All kinds</button>${Object.keys(KINDS).map(k => `<button class="chip ${S.jk === k ? 'on' : ''}" data-a="jk" data-x="${k}">${KINDS[k]}</button>`).join('')}</div>
   ${rows.length ? rows.map(j => jobRow(j, true)).join('') : `<div class="empty"><b>No ${S.jf === 'all' ? '' : S.jf + ' '}jobs${S.jk ? ' of this kind' : ''}.</b>${office ? 'Find a customer and press Start a job, or press New job.' : 'Jobs show up here when the office gives you a task on them.'}</div>`}`;
 }
@@ -435,7 +451,7 @@ async function viewJob(id) {
     const msgs = Array.isArray(t.messages) ? t.messages : [];
     return `<div class="st${t.done ? ' d' : ''}" data-task="${esc(t.id)}"><div class="jh"><span class="ty"><b>${esc(T[t.type] || t.type)}</b></span><span class="b">${esc(t.assignee || 'Unassigned')}</span>${priB(t.priority)}${srcB(t)}
       <span class="sub">${t.done ? 'Done ' + (t.done_at ? esc(fmtAt(t.done_at)) : '') : t.due_at ? 'Due ' + esc(fmtDay(t.due_at)) : ''}</span></div>
-      ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
+      ${t.note ? `<div class="note">${rich(t.note)}</div>` : ''}
       ${(t.tags || []).length ? `<div class="m">${t.tags.map(g => `<span class="tag">${esc(g)}</span>`).join('')}</div>` : ''}
       ${msgs.length ? `<div class="msgs">${msgs.map(m => `<div class="msg">${esc(m.text)}<span class="sub">${esc(m.by || '')} · ${m.at ? esc(fmtAt(m.at)) : ''}</span></div>`).join('')}</div>` : ''}
       ${t.created_by ? `<div class="sub">Added by ${esc(t.created_by)}</div>` : ''}
@@ -609,7 +625,7 @@ async function saveCall(ev) {
     await q(sb.from('calls').insert({ workspace: WS, taken_by: me.name, direction: 'in', caller: caller || null, phone: phone || null, customer_id: c ? c.id : null, job_id: jobId || null, summary: notes || null, started_at: new Date().toISOString() }));
     closeOverlay();
     toast(taskMade ? 'Call saved and task created.' : 'Call saved.');
-    if (['tasks', 'calls', 'c', 'j'].includes(parseHash().v)) refresh();
+    if (['jobs', 'calls', 'c', 'j'].includes(parseHash().v)) refresh();
   } catch (e) { msg.textContent = errMsg(e); btn.disabled = false; }
 }
 
@@ -814,7 +830,7 @@ $('#callBtn').onclick = () => openCall();
 $('#inbBtn').onclick = () => openInbox();
 
 await loadStaff();
-if (!location.hash) history.replaceState(null, '', '#/tasks');
+if (!location.hash) history.replaceState(null, '', '#/jobs');
 loadInbox();
 await route();
 })();

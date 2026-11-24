@@ -112,6 +112,10 @@ li.done .check::before { border-color: var(--chalk-dim); }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--chalk); color: var(--board-deep); padding: 6px 16px; border-radius: 8px; font-family: var(--font-label); z-index: 50; max-width: 90vw; }
 /* Assign / status menu */
 .pop { position: absolute; z-index: 40; width: min(320px, calc(100vw - 32px)); background: var(--pop); color: var(--chalk); border: 2px solid var(--chalk); border-radius: 10px; padding: 10px 12px 12px; box-shadow: 0 10px 28px var(--shadow); }
+.pop textarea.pnote { width: 100%; min-height: 64px; margin: 2px 0 8px; padding: 6px 8px; background: transparent; color: var(--chalk); border: 2px dashed var(--chalk-dim); border-radius: 8px; font: 400 16px/1.3 var(--font-label); resize: vertical; box-sizing: border-box; }
+.pop textarea.pnote:focus { outline: none; border-color: var(--chalk); }
+.totop { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 45; min-height: 44px; padding: 2px 16px; border: 2px solid var(--chalk); border-radius: 22px; background: var(--pop); color: var(--chalk); font-family: var(--font-label); font-size: 18px; letter-spacing: .04em; box-shadow: 0 6px 18px var(--shadow); cursor: pointer; }
+.totop[hidden] { display: none; }
 .pop h3 { margin: 6px 0 4px; font: 400 22px/1.1 var(--font-display); }
 .pop .opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .pop .opt { min-height: 40px; border: 2px dashed var(--chalk-dim); border-radius: 18px; padding: 2px 12px; font-family: var(--font-label); font-size: 17px; letter-spacing: .03em; }
@@ -152,6 +156,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
   <details class="tray" id="tray" hidden><summary id="traySum">Done</summary><ul id="doneList"></ul></details>
 </main></div></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<button type="button" class="totop" id="toTop" hidden aria-label="Back to top">&uarr; Top</button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="../shared/drpool.js"></script>
@@ -267,17 +272,17 @@ li.done .check::before { border-color: var(--chalk-dim); }
     return true;
   }
   /* Assign = create/update the CRM task and message the person (RPC inbox_board_assign), then mirror it on the card */
-  async function assignToCrm(it, pp) {
+  async function assignToCrm(it, pp, noteText) {
     const before = { assigned_to: it.assigned_to, assigned_staff_id: it.assigned_staff_id, task_id: it.task_id, status: it.status };
     patchLocal(it.id, { assigned_to: pp.name, assigned_staff_id: pp.id, status: 'in_progress' });
-    const { data, error } = await sb.rpc('inbox_board_assign', { p_id: it.id, p_to: pp.name, p_by: me.name, p_note: null });
+    const { data, error } = await sb.rpc('inbox_board_assign', { p_id: it.id, p_to: pp.name, p_by: me.name, p_note: (noteText || '').trim() || null });
     if (error) {
       patchLocal(it.id, before);
       toast(/permission|policy|42501/i.test(error.message + error.code) ? 'You can view this board but not change it.' : 'Could not assign. Try again.');
       return false;
     }
     patchLocal(it.id, { task_id: data && data.task_id || null });
-    toast('Assigned to ' + pp.name + ' - added to their CRM tasks');
+    toast('Assigned to ' + pp.name + ' - added to their CRM tasks' + ((noteText || '').trim() ? ' with your note' : ''));
     return true;
   }
   function toggle(it) {
@@ -296,11 +301,13 @@ li.done .check::before { border-color: var(--chalk-dim); }
     closePop();
     const p = el('div', 'pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Assign or set status: ' + it.title);
     p.appendChild(el('h3', null, 'Assign to'));
+    const note = el('textarea', 'pnote'); note.placeholder = 'Add a note for them (optional), e.g. I called and they said...'; note.setAttribute('aria-label', 'Note for the person');
+    p.appendChild(note);
     const a = el('div', 'opts');
     const people = staff.map(s => ({ name: s.display_name, id: s.id })).concat([{ name: 'Office', id: null }]);
     people.forEach(pp => {
       const b = el('button', 'opt', pp.name); b.type = 'button'; b.setAttribute('aria-pressed', String(it.assigned_to === pp.name));
-      b.onclick = () => { closePop(); if (it.assigned_to !== pp.name) assignToCrm(it, pp); };
+      b.onclick = () => { closePop(); if (it.assigned_to !== pp.name || note.value.trim()) assignToCrm(it, pp, note.value); };
       a.appendChild(b);
     });
     if (it.assigned_to) {
@@ -336,6 +343,9 @@ li.done .check::before { border-color: var(--chalk-dim); }
   }
   document.addEventListener('click', e => { if (popEl && !popEl.contains(e.target) && e.target !== popBtn) closePop(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && popEl) closePop(); });
+  const topBtn = $('toTop');
+  topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+  window.addEventListener('scroll', () => { topBtn.hidden = window.scrollY < 400; }, { passive: true });
 
   /* ---------- render ---------- */
   function row(it, accent) {
