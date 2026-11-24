@@ -49,7 +49,7 @@ async function load(){
   <h2>Find a client</h2><form id="cf" style="display:flex;gap:8px;flex-wrap:wrap"><input id="cq" placeholder="Name, email, address or account #" style="flex:1;min-width:220px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--card);color:var(--ink)"><button>Search</button></form><div id="cr"></div>
   <h2>Every tool and what it holds</h2><div class="grid">
   ${card('Customers',"Names, addresses, emails, rates — the base for everything",n('customers'),S.customers&&S.customers.last_change,st1('customers',30))}
-  ${card('Route schedule','Weekly route stops: CRM, Route Planner, Dashboard read this',n('route_stops')+' stops',S.route_stops&&S.route_stops.last_change,st1('route_stops',8),'Only the week of Oct 25 is loaded')}
+  ${card('Route schedule','Weekly route stops: CRM, Route Planner, Dashboard read this',n('route_stops')+' stops',S.route_stops&&S.route_stops.last_change,st1('route_stops',8),'Weeks of Oct 25 and Nov 8, 15, 22 are loaded; blue-tag stops are shown but not counted in totals')}
   ${card('CRM tasks & jobs','Team workspace — what staff see',n('tasks')+' tasks · '+n('jobs')+' jobs',S.tasks&&S.tasks.last_change,st1('tasks',14))}
   ${card('WhatsApp board','Tech reports from route chats',n('wa_threads')+' threads',S.wa_threads&&S.wa_threads.last_change,st1('wa_threads',3),openWa+' not handled · '+waTasks+' sent to CRM')}
   ${card('Email Chalkboard','Inbox to-dos',n('chalkboard_items')+' items',S.chalkboard_items&&S.chalkboard_items.last_change,st1('chalkboard_items',1))}
