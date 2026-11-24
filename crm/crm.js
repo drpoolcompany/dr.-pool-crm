@@ -317,6 +317,8 @@ function billLine(v) {
   parts.push(hasPaid ? 'Last paid ' + esc(fmtDate(v.last_paid_on)) + (v.last_paid_amount != null ? ' (' + esc($$(v.last_paid_amount)) + ')' : '') : 'No payment on record');
   return `<p class="sub bill">Billing: ${parts.join(' · ')}</p>`;
 }
+/* one line per stop: a blue-tag customer has a second 'BT' row (null or negative price); fold it into the real stop */
+function oneStop(a) { const bt = a.some(r => r.flag === 'blue_tag'), real = a.filter(r => !(r.flag === 'blue_tag' && (r.price == null || Number(r.price) <= 0))); return (real.length ? real : a.slice(0, 1)).map(r => bt ? { ...r, flag: 'blue_tag' } : r); }
 async function viewCustomer(id) {
   const office = isOffice();
   const [c, wk] = await Promise.all([q(sb.from('customers').select('*').eq('id', id).maybeSingle()), latestWeek().catch(() => null)]);
@@ -339,7 +341,7 @@ async function viewCustomer(id) {
   ${kv.length ? `<h3>Details</h3><dl class="kv">${kv.map(([k, v, html]) => `<dt>${k}</dt><dd>${html ? v : esc(v)}</dd>`).join('')}</dl>` : ''}
   ${office ? billLine(B360) : ''}
   <h3>This week's route${wk ? ` <span class="sub">(schedule week of ${esc(new Date(wk + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' }))})</span>` : ''}</h3>
-  ${R === null ? '<p class="sub">Route could not be loaded.</p>' : R.length ? `<table class="tbl"><tr><th>Day</th><th>Tech</th><th>Route</th><th>Note</th></tr>${R.sort((a, b) => Object.keys(DAYS).indexOf(a.day) - Object.keys(DAYS).indexOf(b.day)).map(s => `<tr><td>${esc(DAYS[s.day] || s.day)}</td><td>${esc(s.tech ? s.tech.name : '')}</td><td>#${esc(s.route_no)} · stop ${esc(s.slot)}</td><td>${esc([s.service_code, s.flag && s.flag.replace('_', ' ')].filter(Boolean).join(' · '))}</td></tr>`).join('')}</table>` : '<p class="sub">Not on this week\'s route.</p>'}
+  ${R === null ? '<p class="sub">Route could not be loaded.</p>' : R.length ? `<table class="tbl"><tr><th>Day</th><th>Tech</th><th>Route</th><th>Note</th></tr>${oneStop(R).sort((a, b) => Object.keys(DAYS).indexOf(a.day) - Object.keys(DAYS).indexOf(b.day)).map(s => `<tr><td>${esc(DAYS[s.day] || s.day)}</td><td>${esc(s.tech ? s.tech.name : '')}</td><td>#${esc(s.route_no)}</td><td>${esc([s.service_code, s.flag && s.flag.replace('_', ' ')].filter(Boolean).join(' · '))}</td></tr>`).join('')}</table>` : '<p class="sub">Not on this week\'s route.</p>'}
   <h3>Jobs</h3>
   ${J === null ? '<p class="sub">Jobs could not be loaded.</p>' : J.length ? J.map(j => jobRow(j, false)).join('') : `<p class="sub">${office ? 'No team jobs for this account yet.' : 'None of your jobs are on this account.'}</p>`}
   <div class="jh" style="justify-content:space-between;margin-top:24px"><h3 style="margin:0">Calls</h3><button type="button" class="btn o sm" data-a="logcall">Log a call</button></div>

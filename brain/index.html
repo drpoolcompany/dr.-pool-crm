@@ -77,6 +77,8 @@ function clientSearch(){
  const lk=v=>String(v).replace(/[\\%_,()]/g,m=>m===','||m==='('||m===')'?' ':'\\'+m);
  const money=n=>n==null?'—':'$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
  const fd=d=>d?new Date(String(d).slice(0,10)+'T12:00').toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}):'—';
+ /* one line per route/day: a blue-tag customer has a second 'BT' row (null or negative price) in the schedule; fold it into the real stop */
+ const oneStop=a=>{a=a||[];const bt=a.some(r=>r.flag==='blue_tag'),real=a.filter(r=>!(r.flag==='blue_tag'&&(r.price==null||Number(r.price)<=0)));const rows=(real.length?real:a.slice(0,1)).map(r=>bt?{...r,flag:'blue_tag'}:r);return rows};
  async function card(id){
   out.innerHTML='<p class="sub">Loading…</p>';
   const [c,sch,tk,em,wa,cl]=await Promise.all([
@@ -96,7 +98,7 @@ function clientSearch(){
    <div>${x.email?`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`:'<span class="sub">no email on file</span>'}${x.phone?' · '+esc(x.phone):''}</div>
    <div class="sub">${esc([x.address,x.city].filter(Boolean).join(', '))}</div>
    <div>Rate: <b>${money(x.monthly_rate)}</b>/month${x.service_level?' · '+esc(x.service_level):''}</div>${billing}
-   <h4 style="margin:10px 0 2px">Route</h4>${li(sch.data,r=>`Route ${esc(r.route_no)} (${esc(r.tech_name)}) · ${esc(r.day)} stop ${esc(r.slot)}${r.price!=null?' · '+money(r.price):''}${r.flag?' · '+esc(r.flag):''}`,'Not on the loaded schedule week'+(x.route_no?' (CRM says route '+esc(x.route_no)+')':''))}
+   <h4 style="margin:10px 0 2px">Route</h4>${li(oneStop(sch.data),r=>`Route ${esc(r.route_no)} (${esc(r.tech_name)}) · ${esc(r.day)}${r.price!=null?' · '+money(r.price):''}${r.flag?' · '+esc(r.flag.replace('_',' ')):''}`,'Not on the loaded schedule week'+(x.route_no?' (CRM says route '+esc(x.route_no)+')':''))}
    <h4 style="margin:10px 0 2px">CRM tasks</h4>${li(tk.data,r=>`${r.done?'✓':'○'} ${esc(r.type)} → ${esc(r.assignee)}${r.due_at?' · due '+esc(fd(r.due_at)):''}${r.note?' · '+esc(r.note.slice(0,100)):''}${r.source?' <span class="sub">('+esc(r.source)+')</span>':''}`,'No team tasks on this client')}
    <h4 style="margin:10px 0 2px">Recent emails / inbox items</h4>${li(emails,r=>`${r.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>`:esc(r.title)} <span class="sub">${esc(r.bucket)} · ${esc(fd(r.at))}${r.done?' · done':''}</span>`,'No inbox items matched')}
    <h4 style="margin:10px 0 2px">WhatsApp reports</h4>${li(wa.data,r=>esc(r.group_name)+' · '+esc(fd(r.started_at))+(r.done?' · handled':''),'None')}
