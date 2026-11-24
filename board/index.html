@@ -266,6 +266,20 @@ li.done .check::before { border-color: var(--chalk-dim); }
     logActivity(it.id, action, value);
     return true;
   }
+  /* Assign = create/update the CRM task and message the person (RPC inbox_board_assign), then mirror it on the card */
+  async function assignToCrm(it, pp) {
+    const before = { assigned_to: it.assigned_to, assigned_staff_id: it.assigned_staff_id, task_id: it.task_id, status: it.status };
+    patchLocal(it.id, { assigned_to: pp.name, assigned_staff_id: pp.id, status: 'in_progress' });
+    const { data, error } = await sb.rpc('inbox_board_assign', { p_id: it.id, p_to: pp.name, p_by: me.name, p_note: null });
+    if (error) {
+      patchLocal(it.id, before);
+      toast(/permission|policy|42501/i.test(error.message + error.code) ? 'You can view this board but not change it.' : 'Could not assign. Try again.');
+      return false;
+    }
+    patchLocal(it.id, { task_id: data && data.task_id || null });
+    toast('Assigned to ' + pp.name + ' - added to their CRM tasks');
+    return true;
+  }
   function toggle(it) {
     const nowDone = !it.done;
     const patch = nowDone
@@ -286,7 +300,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
     const people = staff.map(s => ({ name: s.display_name, id: s.id })).concat([{ name: 'Office', id: null }]);
     people.forEach(pp => {
       const b = el('button', 'opt', pp.name); b.type = 'button'; b.setAttribute('aria-pressed', String(it.assigned_to === pp.name));
-      b.onclick = () => { closePop(); if (it.assigned_to !== pp.name) save(it, { assigned_to: pp.name, assigned_staff_id: pp.id }, 'assigned', pp.name).then(ok => ok && toast('Assigned to ' + pp.name)); };
+      b.onclick = () => { closePop(); if (it.assigned_to !== pp.name) assignToCrm(it, pp); };
       a.appendChild(b);
     });
     if (it.assigned_to) {
@@ -308,7 +322,7 @@ li.done .check::before { border-color: var(--chalk-dim); }
     const hist = el('p', 'hist', 'Loading history…'); p.appendChild(hist);
     sb.from('chalkboard_activity').select('at,by_name,action,value').eq('item_id', it.id).order('at', { ascending: false }).limit(4).then(({ data, error }) => {
       if (error || !data || !data.length) { hist.textContent = error ? '' : 'No changes yet.'; return; }
-      hist.textContent = data.map(h => (h.by_name || 'Someone') + ' ' + ({ done: 'checked it off', reopened: 'reopened it', assigned: 'assigned ' + h.value, unassigned: 'unassigned it', status: 'set ' + (STATUS[h.value] || h.value || '').toLowerCase() }[h.action] || h.action) + ', ' + fmtTime(h.at)).join('\n');
+      hist.textContent = data.map(h => (h.by_name || 'Someone') + ' ' + ({ done: 'checked it off', reopened: 'reopened it', assigned: 'assigned ' + h.value, assign: 'assigned ' + h.value + ' (CRM task)', unassigned: 'unassigned it', status: 'set ' + (STATUS[h.value] || h.value || '').toLowerCase() }[h.action] || h.action) + ', ' + fmtTime(h.at)).join('\n');
       hist.style.whiteSpace = 'pre-line';
     });
     document.body.appendChild(p);
