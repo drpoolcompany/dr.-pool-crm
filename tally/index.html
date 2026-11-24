@@ -20,8 +20,8 @@
   --accent:#4cb8d6; --accent-ink:#06222b; --acid:#f0a35e; --acid-bg:#3a2a18;
   --good:#6fd3a0; --good-bg:#17382a; --bad:#f19a8c; --bad-bg:#3c1f1a; color-scheme:dark}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:20px 40px}
-main{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:18px}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding:0 0 40px}
+main{max-width:1080px;margin-inline:auto;padding:20px 16px 0;display:flex;flex-direction:column;gap:18px}
 h1{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
 h2{font-family:var(--f-display);font-weight:600;font-size:21px;margin:0;letter-spacing:.02em}
 .sub{color:var(--muted);margin:6px 0 0}
@@ -150,7 +150,6 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .thumb .cap{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);color:#fff;font-size:11px;text-align:center;padding:1px 0}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .pill.neutral{background:var(--tint);color:var(--ink)}
-.pill.ph-badge{background:var(--acid-bg);color:var(--acid)}
 .datein{width:140px}
 .idin{width:110px}
 input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
@@ -178,26 +177,80 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
 @media (max-width:520px){h1{font-size:28px}.srch input{width:150px}.ovl{padding:2vh 2vw}.ovl .ovp{width:96vw;padding:12px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-<style>body{padding:0 0 40px}main{padding:20px 16px 0}</style>
+
 <main>
   <header>
     <div>
       <h1>Chemical Tally</h1>
-      <p class="sub" id="range">Loading...</p>
+      <p class="sub" id="range">Dr. Pool, customer 121328. What each route picked up at SCP Fort Lauderdale (B7).</p>
     </div>
     <div class="hbtns">
       <div class="srch"><label class="sr" for="srchIn">Find an invoice</label><input type="text" id="srchIn" placeholder="Find invoice, route, tech" autocomplete="off" aria-controls="srchRes"><kbd aria-hidden="true">/</kbd></div>
       <div class="vsw" role="group" aria-label="View" id="viewSw"><button type="button" data-view="tally" aria-pressed="true">Tally</button><button type="button" data-view="analytics" aria-pressed="false">Analytics</button></div>
       <button class="btn bell" id="bellBtn" type="button" aria-expanded="false" aria-controls="notif" aria-label="Price alerts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="bellN" class="pill bad" hidden>0</span></button>
+      <span class="pill neutral" id="brainChip" role="status" aria-live="polite">Brain: connecting…</span>
+      <button class="btn primary" id="pasteBtn" type="button" aria-expanded="false" aria-controls="pasteBox">Stock and schedule</button>
+      <button class="btn" id="reloadBtn" type="button" title="Read the latest from the shared database">Reload</button>
+      <button class="btn" id="csv" type="button" hidden>Export CSV</button>
     </div>
   </header>
+
+  <p class="note" id="siteNote"><b>Staff site copy.</b> Invoices are added in the Claude version of this page (the SCP Chemical Tally), which reads the PDFs and phone orders, and they appear here from the shared database. Here you can look everything up, save tech names, route stop counts, price-alert and missing-item notes, add things taken from stock, and load a weekly schedule.</p>
 
   <section class="detail" id="srchRes" aria-label="Invoice search results" aria-live="polite" hidden></section>
   <section class="detail" id="notif" aria-label="Price alerts" hidden></section>
 
+  <section class="detail" id="pasteBox" aria-label="Add invoices" hidden>
+    <div class="dhead">
+      <div>
+        <h2>Stock and schedule</h2>
+        <p>Reading invoice PDFs, screenshots and phone orders needs Claude. Use the Claude version of this page (SCP Chemical Tally) for those. Here you can record something taken from stock and load a weekly schedule.</p>
+      </div>
+      <button class="btn" id="pasteClose" type="button">Close</button>
+    </div>
+    <div id="claudeOnly" hidden>
+    <div class="drop" id="drop">
+      <label class="sr" for="pasteText">Invoice text</label>
+      <textarea id="pasteText" rows="3" placeholder="Drop a PDF or screenshots on this box. You can also paste screenshots or invoice text here."></textarea>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="row">
+      <label class="btn" for="fileIn" id="fileLbl" hidden>Choose PDF or images</label>
+      <input type="file" id="fileIn" accept="application/pdf,.pdf,image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+      <button class="btn primary" id="readBtn" type="button" disabled>Read invoices</button>
+      <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
+      <span id="pasteStatus" class="muted" role="status"></span>
+    </div>
+    <div id="preview" class="pv"></div>
+    </div>
+    <div class="stockbox" id="schedBox">
+      <h3>Weekly schedule</h3>
+      <p class="muted">Weekly schedules now come from the Dr. Pool brain on their own. Add an Excel (the one with the Cont routes sheet) only for a week the brain does not have. The Analytics tab uses it from November 2026 on: pools per route and the income they bring in, to work out pool equivalents.</p>
+      <div class="row"><label class="btn" for="scFile" id="scFileLbl" tabindex="0">Choose schedule Excel</label><input type="file" id="scFile" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden><span id="scStatus" class="muted" role="status"></span></div>
+      <div id="scPreview" class="pv"></div>
+      <div id="scList"></div>
+    </div>
+    <div class="stockbox" id="stockBox">
+      <h3>Taken from stock (no invoice)</h3>
+      <p class="muted">For things a tech took from our own stock, like a white net. It is added with the other items, with no price. Find it or remove it on the Invoices tab.</p>
+      <div class="stockform">
+        <label class="f" for="stDate">Date <input type="date" id="stDate"></label>
+        <label class="f" for="stRoute">Route <select id="stRoute"></select></label>
+        <label class="f" for="stItem">Item <select id="stItem"></select></label>
+        <label class="f" for="stName" id="stNameLbl">Name <input type="text" id="stName" list="stNames" placeholder="White net" style="width:150px"></label>
+        <datalist id="stNames"></datalist>
+        <label class="f" for="stQty">Quantity <input type="number" id="stQty" min="0" step="any" value="1" style="width:80px"></label>
+        <label class="f" for="stNote">Note <input type="text" id="stNote" placeholder="Who took it, why" style="width:170px"></label>
+        <button class="btn primary" type="button" id="stAdd">Add from stock</button>
+      </div>
+      <span id="stStatus" class="muted" role="status"></span>
+      <div id="stList"></div>
+    </div>
+  </section>
+
   <nav class="months" id="months" role="tablist" aria-label="Month"></nav>
 
-  <section id="missing" class="alerts" aria-live="polite" hidden></section>
+  <section id="missing" class="alerts" role="status" aria-live="polite" hidden></section>
 
   <section id="priceBanner" class="alerts" aria-live="polite" hidden></section>
 
@@ -216,9 +269,9 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
   </section>
 </main>
 
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="../shared/drpool.js"></script>
+<script src="store.js"></script>
 <script>
 (function(){
 var CATS=[
@@ -231,17 +284,18 @@ var CATS=[
 var TABS=[['route','By route'],['day','By day'],['prod','By product'],['acid','Muriatic acid'],['analytics','Analytics'],['inv','Invoices']];
 var UMW={JUG:['jug','jugs'],GAL:['gal','gal'],PL:['unit','units'],PLT:['unit','units'],BAG:['bag','bags'],EA:['each','each'],DRM:['drum','drums'],CS:['box','boxes'],BTL:['bottle','bottles']};
 var invoices=[],skipped=[],cfg={bottlePrice:4.36,perBox:4,techs:{},aliases:{}},tab='route',dateSel='all',loaded={inv:false},detail=null,vendSel='all';
+var cfgRef=null;
 function isPro(v){return !!v&&v.vendor==='Proline'}
 var BR={techs:{},weeks:[],nos:null,cur:'',inflight:{},failed:{},q:Promise.resolve()};
-function techLabel(r){return BR.techs[r]||cfg.techs[r]||''}
+function techLabel(r){return String(r)==='Stock'?'Stock':(BR.techs[r]||cfg.techs[r]||'')}
+function rlabel(r){return String(r)==='Stock'?'Stock':'Route '+r}
+function ordNote(v){return v&&v.orderDate&&!isStock(v)&&v.source!=='phone'?'Ordered '+mmdd(v.orderDate)+', invoiced '+mmdd(v.date):''}
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function money(n){n=Number(n||0);return (n<0?'−$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function num(n){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2})}
 function dlabel(iso){if(iso==='2026-10-01')return 'Before app';var d=new Date(iso+'T12:00:00');return isNaN(d)?iso:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 function rnum(r){var n=parseFloat(r);return isNaN(n)?1e9:n}
-function rlabel(r){return r==='Stock'?'Stock':'Route '+r}
-function ordNote(v){var o=v.orderDate;if(v.source==='phone'||!o||o===v.date||/, invoiced /.test(v.note||''))return '';return 'ordered '+o.slice(5,7)+'/'+o.slice(8,10)+', invoiced '+String(v.date).slice(5,7)+'/'+String(v.date).slice(8,10)}
 
 function bottlesOf(it){
   if(it.cat!=='acid')return 0;
@@ -315,7 +369,7 @@ function renderMonths(){
     return '<button class="mtab" type="button" role="tab" data-month="'+m+'" aria-selected="'+(m===mo)+'">'+esc(monthLabel(m))+'<small>'+n+' invoice'+(n===1?'':'s')+'</small></button>';
   }).join('');
 }
-function techOf(route){var n=techLabel(route);return n?' ('+esc(n)+')':''}
+function techOf(route){var n=techLabel(route);return n&&String(route)!=='Stock'?' ('+esc(n)+')':''}
 
 function aggregate(list,keyFn){
   var m={},PROM={};
@@ -354,6 +408,7 @@ function invLink(id){return '<button class="lnk" type="button" data-act="inv" da
 function matrix(list,withTech,date){
   var rows=aggregate(list,function(v){return String(v.route||'?')});
   if(withTech&&!date&&!rows.some(function(r){return r.key==='0'}))rows.push({key:'0',q:{},others:{},other:0,spend:0,inv:0});
+  if(withTech&&!date&&!rows.some(function(r){return r.key==='Stock'}))rows.push({key:'Stock',q:{},others:{},other:0,spend:0,inv:0});
   rows=rows.sort(function(a,b){return rnum(a.key)-rnum(b.key)});
   var t=totals(rows);
   var h='<div class="scroll"><table><thead><tr><th>Route</th>'+(withTech?'<th class="l">Pool tech</th>':'')+'<th>Invoices</th>';
@@ -382,7 +437,7 @@ function matrix(list,withTech,date){
   rows.forEach(function(a){
     if(!a.inv)a.q._has=0;else a.q._has=1;
     h+='<tr><td><b>'+lk(esc(rlabel(a.key)),{route:a.key,prod:'',date:date||''})+'</b></td>';
-    if(withTech)h+='<td class="l"><input class="techin" type="text" id="tech-'+esc(a.key)+(date?'-'+esc(date):'')+'" data-route="'+esc(a.key)+'" placeholder="Add name" value="'+esc(techLabel(a.key))+'"'+' readonly'+' aria-label="Pool tech for route '+esc(a.key)+'"></td>';
+    if(withTech)h+='<td class="l"><input class="techin" type="text" id="tech-'+esc(a.key)+(date?'-'+esc(date):'')+'" data-route="'+esc(a.key)+'" placeholder="Add name" value="'+esc(techLabel(a.key))+'"'+(BR.techs[a.key]?' readonly title="Name comes from the Dr. Pool brain"':a.key==='Stock'?' readonly title="Office stock invoices, not a route"':'')+' aria-label="Pool tech for route '+esc(a.key)+'"></td>';
     h+='<td class="m">'+a.inv+'</td>'+cells(a.key,a.q,a.others)+'<td class="m">'+money(a.spend)+'</td></tr>';
   });
   h+='</tbody><tfoot><tr><td>Total</td>'+(withTech?'<td></td>':'')+'<td class="m">'+t.inv+'</td>'+cells('*',t.q,{})+'<td class="m">'+money(t.spend)+'</td></tr></tfoot></table></div>';
@@ -452,7 +507,7 @@ function acidTab(list){
 
 /* ---------- Analytics: the QUIMICOS sheet's columns R to AA, run for every chemical ---------- */
 var DEF_STOPS={0:['GEFET',0],1:['MIKA',64],2:['LUIS PINASCO',81],3:['EVALDO',90],4:['RODRIGO',90],5:['CARLOS',82],6:['MIKE',79],7:['SAMUEL',85],8:['FABIO',90],9:['JEAN',64],10:['ADALBERTO',63],11:['MAICON',41],12:['ALDO',12]};
-var NOCOMP={'0':1,'12':1}; /* Gefet and Aldo are shown but left out of the lowest and the average */
+var NOCOMP={'0':1,'12':1,'Stock':1}; /* Gefet and Aldo are shown but left out of the lowest and the average */
 var AN=[
   {k:'chlorine',h:'Liquid chlorine',u:'gal'},
   {k:'tabs',h:'3" Xtreme tabs (50#)',u:'units'},
@@ -490,6 +545,7 @@ function curMonth(){var ms=anMonths();return an.month&&ms.indexOf(an.month)>=0?a
 function analyze(list,wpm,benchOverride,baseFn){
   var m={};
   Object.keys(DEF_STOPS).forEach(function(r){m[r]={route:r,q:{},c:{},W:0}});
+  m['Stock']={route:'Stock',q:{},c:{},W:0};
   list.forEach(function(v){
     var r=String(v.route||'?'),a=m[r]||(m[r]={route:r,q:{},c:{},W:0});
     (v.items||[]).forEach(function(it){
@@ -574,7 +630,7 @@ function hbar(o){
 }
 
 /* ---------- weekly schedules (November 2026 on): pools and income per route ---------- */
-var schedules=[],PE_FROM='2026-11';
+var schedules=[],schedRef=null,schedDraft=null,PE_FROM='2026-11';
 /* brain weeks (Sunday-dated in the brain, shown here by their Monday) win over manual uploads of the same week */
 function allSched(){
   var out=BR.weeks.slice(),have={};
@@ -597,13 +653,110 @@ function peBase(mo){
 }
 function weekLabel(iso){var d=new Date(iso+'T12:00:00'),e=new Date(d.getTime()+4*864e5);function f(x){return x.toLocaleDateString('en-US',{month:'short',day:'numeric'})}return isNaN(d)?iso:f(d)+' to '+f(e)}
 
+/* Read the "Cont routes" sheet: each route block has a name/price pair per day.
+   Pools = stops with a price above 0. Income = every price, offsets (-BT, -S) included.
+   The Faturamento, Total and Media rows are the sheet's own totals and are skipped. */
+function parseSchedule(wb){
+  var name=wb.SheetNames.filter(function(n){return /cont\s*routes/i.test(n)})[0]||wb.SheetNames[0];
+  var ws=wb.Sheets[name];if(!ws||!ws['!ref'])throw new Error('The workbook has no Cont routes sheet.');
+  var rg=XLSX.utils.decode_range(ws['!ref']),routes={},cur=null;
+  function cell(r,c){return ws[XLSX.utils.encode_cell({r:r,c:c})]}
+  function txt(r,c){var x=cell(r,c);return x&&x.v!=null?String(x.v).trim():''}
+  for(var r=rg.s.r;r<=rg.e.r;r++){
+    var a=txt(r,0),b=txt(r,1).toLowerCase();
+    var m=/^route\s*#?\s*(\d+)\s*(.*)$/i.exec(a);
+    if(m){var n=String(parseInt(m[1],10));cur=routes[n]={name:m[2].replace(/\s+/g,' ').trim(),pools:0,income:0,days:[0,0,0,0,0,0]};continue}
+    if(!cur||/^(faturamento|total|media)/.test(b))continue;
+    for(var d=0;d<6;d++){
+      var nc=1+d*2,nm=txt(r,nc),pc=cell(r,nc+1);
+      if(!nm||!pc||pc.t!=='n')continue;
+      var p=Number(pc.v);if(!isFinite(p))continue;
+      cur.income+=p;
+      if(p>0){cur.pools++;cur.days[d]++}
+    }
+  }
+  Object.keys(routes).forEach(function(k){routes[k].income=Math.round(routes[k].income*100)/100});
+  if(!Object.keys(routes).length)throw new Error('No ROUTE # blocks were found in that sheet.');
+  return routes;
+}
+function weekFromName(fn){
+  var m=/(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})/.exec(fn||'');
+  if(!m)return '';
+  var iso=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0');
+  return isNaN(new Date(iso+'T12:00:00'))?'':iso;
+}
+function lastMonday(){var d=new Date();d.setHours(12);var k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+var xlsxLoading=null;
+function loadXLSX(){
+  if(window.XLSX)return Promise.resolve();
+  if(xlsxLoading)return xlsxLoading;
+  xlsxLoading=new Promise(function(ok,bad){
+    var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=function(){ok()};s.onerror=function(){xlsxLoading=null;bad(new Error('The Excel reader could not load. Check the connection and try again.'))};
+    document.head.appendChild(s);
+  });
+  return xlsxLoading;
+}
+function readScheduleFile(f){
+  var st=document.getElementById('scStatus');st.textContent='Reading '+f.name+'...';
+  loadXLSX().then(function(){return f.arrayBuffer()}).then(function(buf){
+    var wb=XLSX.read(buf,{type:'array'});
+    schedDraft={file:f.name,week:weekFromName(f.name)||lastMonday(),routes:parseSchedule(wb)};
+    st.textContent='';renderSchedBox();
+  }).catch(function(err){schedDraft=null;st.textContent=(err&&err.message)||'That file could not be read.';renderSchedBox()});
+}
+function schedTable(routes,showPE){
+  var ks=Object.keys(routes).sort(function(a,b){return rnum(a)-rnum(b)}),tp=0,ti=0;
+  ks.forEach(function(k){tp+=routes[k].pools;ti+=routes[k].income});
+  var avg=tp?ti/tp:0;
+  var h='<div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Pools</th><th>Income</th><th>Avg $ per pool</th>'+(showPE?'<th>Pools equiv</th>':'')+'</tr></thead><tbody>';
+  ks.forEach(function(k){var x=routes[k];h+='<tr><td><b>'+esc(k)+'</b></td><td class="l">'+esc(x.name)+'</td><td class="m">'+num(x.pools)+'</td><td class="m">'+money(x.income)+'</td><td class="m">'+(x.pools?money(x.income/x.pools):'')+'</td>'+(showPE?'<td class="m">'+(avg?num(Math.round(x.income/avg)):'')+'</td>':'')+'</tr>'});
+  return h+'</tbody><tfoot><tr><td>Total</td><td></td><td class="m">'+num(tp)+'</td><td class="m">'+money(ti)+'</td><td class="m">'+(tp?money(avg):'')+'</td>'+(showPE?'<td class="m">'+num(Math.round(tp))+'</td>':'')+'</tr></tfoot></table></div>';
+}
+function renderSchedBox(){
+  var box=document.getElementById('scPreview'),list=document.getElementById('scList');if(!box)return;
+  if(!schedDraft){box.innerHTML='';}
+  else{
+    var exists=schedules.some(function(s){return s.week===schedDraft.week}),inBrain=BR.weeks.some(function(w){return w.week===schedDraft.week});
+    box.innerHTML='<div class="row"><label class="f" for="scWeek">Week starting (Monday) <input type="date" id="scWeek" value="'+esc(schedDraft.week)+'"></label><span class="muted">'+esc(schedDraft.file)+'</span></div>'+
+      schedTable(schedDraft.routes,true)+
+      '<div class="row"><button class="btn primary" type="button" id="scSave">'+(exists?'Replace the week of ':'Save the week of ')+esc(weekLabel(schedDraft.week))+'</button><button class="btn" type="button" id="scCancel">Cancel</button>'+
+      (inBrain?'<span class="bad-t">The brain already has this week, and the brain schedule is the one used. Saving only keeps a backup copy.</span>':exists?'<span class="bad-t">A schedule for this week is already saved. Saving replaces it.</span>':'')+'</div>';
+  }
+  var saved=allSched().slice().sort(function(a,b){return a.week<b.week?1:-1});
+  list.innerHTML=saved.length?'<p class="muted">Saved weeks: '+saved.map(function(s){var t=0;Object.keys(s.routes||{}).forEach(function(k){t+=Number(s.routes[k].pools)||0});
+    return '<span class="wk">'+esc(weekLabel(s.week))+' <small>'+num(t)+' pools</small>'+(s.src==='brain'?' <small>from the brain</small>':' <button class="linkbtn" type="button" data-scdel="'+esc(s.week)+'" aria-label="Remove the week of '+esc(weekLabel(s.week))+'">Remove</button>')+'</span>'}).join(' ')+'</p>':'<p class="muted">No weekly schedules yet.</p>';
+}
+document.addEventListener('change',function(e){
+  if(e.target&&e.target.id==='scFile'&&e.target.files&&e.target.files[0]){readScheduleFile(e.target.files[0]);e.target.value=''}
+  if(e.target&&e.target.id==='scWeek'&&schedDraft){schedDraft.week=e.target.value;renderSchedBox()}
+});
+document.addEventListener('click',function(e){
+  var st=document.getElementById('scStatus');
+  if(e.target.closest('#scCancel')){schedDraft=null;renderSchedBox();return}
+  if(e.target.closest('#scSave')&&schedDraft){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(schedDraft.week)){st.textContent='Pick the Monday the week starts.';return}
+    if(!dbRef){st.textContent='The saved tally is not available in this view.';return}
+    var d={week:schedDraft.week,file:schedDraft.file,routes:schedDraft.routes,at:Date.now()};
+    st.textContent='Saving...';
+    dbRef.doc('schedules/'+d.week).set(d).then(function(){st.textContent='Saved the week of '+weekLabel(d.week)+'.';schedDraft=null;renderSchedBox()}).catch(function(){st.textContent='That could not be saved. Ask the owner for edit access.'});
+    return;
+  }
+  var del=e.target.closest('[data-scdel]');
+  if(del&&dbRef){var w=del.getAttribute('data-scdel');dbRef.doc('schedules/'+w).delete().then(function(){st.textContent='Removed the week of '+weekLabel(w)+'.'}).catch(function(){st.textContent='Could not remove that.'});return}
+  if(e.target.closest('[data-opensched]')){
+    var pb=document.getElementById('pasteBox');if(pb.hidden){document.getElementById('pasteBtn').click()}
+    setTimeout(function(){var s=document.getElementById('schedBox');if(s){s.scrollIntoView({behavior:'smooth',block:'start'});var b=document.getElementById('scFileLbl');if(b)b.focus()}},50);
+  }
+});
+
 function analyticsTab(){
   var mo=curView(),wpm=an.wpm>0?an.wpm:4.3,list=monthInv();
   if(!list.length&&mo<PE_FROM)return '<div class="empty">No invoices this month.</div>';
   var peMode=mo>=PE_FROM,P=null,basis='quant',sN='quant',sLong='weekly visits';
   if(peMode){
     P=peBase(mo);
-    if(!P.weeks.length)return '<div class="note">No weekly schedule has reached the Brain for '+esc(monthLabel(mo))+' yet, so the pool equivalents cannot be worked out. It appears here on its own once the schedule is in the Brain.</div>';
+    if(!P.weeks.length)return '<div class="alert"><div><b>Add this month\'s weekly schedule</b><p>'+esc(monthLabel(mo))+' analytics compares the techs by pool equivalents, which come from the weekly schedule: how many pools each route has and the income they bring in. No schedule is saved for '+esc(monthLabel(mo))+' yet.</p></div><div class="row"><button class="btn primary" type="button" data-opensched="1">Add the weekly schedule</button></div></div>';
     basis=an.basis==='visits'?'visits':'pe';
     sN=basis==='pe'?'pool equiv':'pool';sLong=basis==='pe'?'pool equivalents':'pools (weekly visits)';
   }
@@ -615,12 +768,12 @@ function analyticsTab(){
     '<label class="f" for="anwk">Weeks in the month <input type="number" step="0.1" min="0.1" id="anwk" value="'+wpm+'" style="width:72px"></label>'+
     '<label class="f" for="anbn">Lowest $ per '+esc(sN)+' <input type="number" step="0.01" min="0" id="anbn" value="'+(an.bench>0?an.bench:'')+'" placeholder="'+(A.lowest===null?'':f2(A.lowest))+'" style="width:96px"></label></div>';
   if(peMode){
-    h+='<div class="note"><b>Pool equivalents</b> weigh each route by the income it brings in, because the price is close to the size of the pool. Pools equiv = route income ÷ (total income ÷ total pools), so all routes together still add up to the total pools. A route of big, expensive pools gets more pool equivalents than pools, and is allowed more chemicals. '+esc(monthLabel(mo))+' uses '+P.weeks.length+' weekly schedule'+(P.weeks.length===1?'':'s')+' ('+P.weeks.map(function(s){return esc(weekLabel(s.week))}).join(', ')+'), averaged. Per month divides by '+esc(sN)+'; per visit divides that by '+wpm+' weeks. Aldo and Gefet are shown but left out of the lowest and the average. 25% or more above the average is flagged ▲, 25% or more below ▼.</div>';
+    h+='<div class="note"><b>Pool equivalents</b> weigh each route by the income it brings in, because the price is close to the size of the pool. Pools equiv = route income ÷ (total income ÷ total pools), so all routes together still add up to the total pools. A route of big, expensive pools gets more pool equivalents than pools, and is allowed more chemicals. '+esc(monthLabel(mo))+' uses '+P.weeks.length+' weekly schedule'+(P.weeks.length===1?'':'s')+' ('+P.weeks.map(function(s){return esc(weekLabel(s.week))}).join(', ')+'), averaged. Per month divides by '+esc(sN)+'; per visit divides that by '+wpm+' weeks. Aldo and Gefet are shown but left out of the lowest and the average. 25% or more above the average is flagged ▲, 25% or more below ▼. <button class="linkbtn" type="button" data-opensched="1">Add or replace a weekly schedule</button></div>';
     /* the pool-equivalent table, as in the report */
     h+='<h2>Pool equivalents, '+esc(monthLabel(mo))+'</h2><div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Pools</th><th>Income</th><th>Avg $ per pool</th><th>Pools equiv</th><th>Equiv vs pools</th><th>Chem cost</th><th>Chem cost<br>% of income</th></tr></thead><tbody>';
     var ti=0,tp=0,tw=0;
     rows.forEach(function(a){
-      if(!a.pools&&!a.W&&a.route!=='0')return;ti+=a.inc;tp+=a.pools;tw+=a.W;
+      if(!a.pools&&!a.W&&a.route!=='0'&&a.route!=='Stock')return;ti+=a.inc;tp+=a.pools;tw+=a.W;
       var pc=a.inc?a.W/a.inc:null;
       h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+(a.comp?'':' <small>'+(NOCOMP[a.route]?'not compared':'no invoices yet')+'</small>')+'</td><td class="m">'+num(a.pools)+'</td><td class="m">'+(a.inc?money(a.inc):'')+'</td><td class="m">'+(a.pools?money(a.inc/a.pools):'')+'</td><td class="m">'+(a.pools?f2(a.pe):'')+'</td><td class="m">'+(a.pools?'×'+f2(a.pe/a.pools):'')+'</td><td class="m">'+money(a.W)+'</td><td class="m">'+(pc!==null?(pc*100).toFixed(1)+'%':'')+'</td></tr>';
     });
@@ -642,7 +795,7 @@ function analyticsTab(){
   var SL=peMode?(basis==='pe'?'pools equiv':'pools'):'quant';
   h+='<h2>Chlorine and cost, columns R to AA as in the sheet</h2><div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Bleach<br>(gal)</th><th>R<br>% cloro</th><th>S<br>'+esc(SL)+'</th><th>T<br>gal / '+esc(sN)+' / month</th><th>U<br>jugs / '+esc(sN)+' / month</th><th>V<br>gal / visit</th><th>W<br>custo total</th><th>Y<br>$ / '+esc(sN)+'</th><th>AA<br>vs lowest</th><th>X<br>gasto a mais</th><th>vs average</th><th>Over the average</th></tr></thead><tbody>';
   rows.forEach(function(a){
-    if(!a.S&&!a.W&&a.route!=='0')return;
+    if(!a.S&&!a.W&&a.route!=='0'&&a.route!=='Stock')return;
     var C=a.q.chlorine||0,T=a.S?C/a.S:null;
     h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+(a.comp?'':' <small>'+(NOCOMP[a.route]?'not compared':'no invoices yet')+'</small>')+'</td><td class="m">'+num(C)+'</td><td class="m">'+(A.tot.q.chlorine?(C/A.tot.q.chlorine*100).toFixed(1)+'%':'')+'</td><td class="m">'+(peMode?f2(a.S):a.S)+'</td>'+
       '<td class="m">'+(T!==null?f2(T):'')+'</td><td class="m">'+(T!==null?f2(T/GAL_PER_JUG):'')+'</td><td class="m">'+(T!==null?f3(T/wpm):'')+'</td><td class="m">'+money(a.W)+'</td><td class="m">'+(a.Y!==null?money(a.Y):'')+'</td>'+
@@ -666,7 +819,7 @@ function analyticsTab(){
     hbar({title:cur.h+', $ per '+sN+' for the month',rows:buy.map(function(a){var r=cm(a,cur.k,A);var d=s.avgCost?r.Y/s.avgCost-1:0;return {label:a.name,v:r.Y||0,flag:d>=OUT?'hi':(r.q&&d<=-OUT)?'lo':'',tip:a.name+': '+money(r.Y||0)+' per '+sN}}),avg:s.avgCost,low:s.lowCost,fmt:function(v){return money(v)}})+'</div>';
   h+='<div class="scroll"><table><thead><tr><th>Route</th><th class="l">Tech</th><th>Bought<br>('+esc(cur.u)+')</th><th>% of total</th><th>'+esc(SL.charAt(0).toUpperCase()+SL.slice(1))+'</th><th>Per '+esc(sN)+'<br>per month</th>'+(cur.k==='chlorine'?'<th>Jugs per '+esc(sN)+'<br>per month</th>':'')+'<th>Per visit</th><th>Cost</th><th>$ per '+esc(sN)+'</th><th>Vs lowest<br>(per '+esc(sN)+')</th><th>Vs average</th><th>Over the average</th></tr></thead><tbody>';
   rows.forEach(function(a){
-    if(!a.S&&!a.W&&a.route!=='0')return;
+    if(!a.S&&!a.W&&a.route!=='0'&&a.route!=='Stock')return;
     var r=cm(a,cur.k,A);
     h+='<tr'+(a.comp?'':' class="dim"')+'><td><b>'+esc(a.route)+'</b></td><td class="l">'+esc(a.name)+'</td><td class="m">'+(r.q?num(r.q):'')+'</td><td class="m">'+(r.q?(r.pctTot*100).toFixed(1)+'%':'')+'</td><td class="m">'+(peMode?f2(a.S):a.S)+'</td>'+
       '<td class="m">'+(r.T!==null&&r.q?f2(r.T):'')+'</td>'+(cur.k==='chlorine'?'<td class="m">'+(r.T!==null&&r.q?f2(r.T/GAL_PER_JUG):'')+'</td>':'')+
@@ -704,12 +857,18 @@ function analyticsTab(){
   if(!peMode){
     h+='<h2>Quant: weekly visits per route</h2><div class="settings">'+Object.keys(DEF_STOPS).map(function(r){
       return '<label class="f" for="st-'+r+'">'+esc(r)+' '+esc(techName(r))+' <input type="number" min="0" step="1" class="stin" id="st-'+r+'" data-route="'+r+'" value="'+stopsOf(r)+'" style="width:70px"></label>';
-    }).join('')+'</div><div class="note">From the 09/27 to 10/03 schedule, 841 visits a week. Change a number when a route grows or shrinks; it changes this page only and is not saved.</div>';
+    }).join('')+'</div><div class="note">From the 09/27 to 10/03 schedule, 841 visits a week. Change a number when a route grows or shrinks; it saves for everyone.</div>';
   }
   return h;
 }
 
-function saveAn(patch){an=Object.assign({},an,patch)}
+function saveAn(patch){
+  an=Object.assign({},an,patch);
+  if(!stopsRef)return;
+  stopsRef.set({stops:an.stops,wpm:an.wpm||4.3,bench:an.bench||null,month:an.month||null,basis:an.basis||'pe'}).catch(function(){
+    document.getElementById('panel').insertAdjacentHTML('afterbegin','<div class="note">That change could not be saved. Ask the owner for edit access.</div>');
+  });
+}
 
 function invTab(list){
   var rows=list.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:rnum(a.route)-rnum(b.route)});
@@ -718,7 +877,7 @@ function invTab(list){
     var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
     var items=(v.items||[]).map(function(i){var z=zeroLines({items:[i]}).length;return (z?'<b class="bad-t">':'')+esc(itemText(i))+(z?'</b>':'')}).join(', ');
     var stk=isStock(v);
-    h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':'')+phBadge(v)+(v.order?'<small>order '+esc(v.order)+(ordNote(v)?', '+esc(ordNote(v)):'')+'</small>':''))+'</td>'+
+    h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':'')+phBadge(v)+(ordNote(v)?'<small>'+esc(ordNote(v))+'</small>':''))+'</td>'+
       '<td class="l" style="white-space:normal;min-width:260px">'+items+(stk&&v.note?'<small>'+esc(v.note)+'</small>':'')+'</td><td class="m">'+(stk?'':money(v.total))+'</td>'+
       '<td class="l">'+(stk?'<button class="btn" type="button" data-stdel="'+esc(v.invoice)+'">Remove</button>':off===0?'<span class="pill ok">Lines add up</span>':'<span class="pill bad">Off by '+money(off)+'</span>')+'</td></tr>';
   });
@@ -763,8 +922,8 @@ function itemText(it){return qtyText(it)+' '+itemName(it)}
 function missKey(d,x){return d.invoice+'|'+(x.it.sku||x.it.desc||'')+'|'+x.i}
 function sameItem(a,b){return (a.sku&&b.sku)?String(a.sku).toUpperCase()===String(b.sku).toUpperCase():(a.cat!=='other'?a.cat===b.cat:prodKey(a)===prodKey(b))}
 function deliveredBy(d,it){
+  if(it.fulfilledBy){var fb=invoices.filter(function(v){return v.invoice===it.fulfilledBy})[0];if(fb)return fb}
   var hit=null;
-  if(it.fb){var f=invoices.filter(function(v){return v.invoice===it.fb})[0];if(f)return f}
   invoices.forEach(function(v){
     if(hit||v.invoice===d.invoice)return;
     var sameOrder=d.order&&v.order&&v.order===d.order;
@@ -773,12 +932,24 @@ function deliveredBy(d,it){
   });
   return hit;
 }
+function orderedQty(it){var m=/(\d+(?:\.\d+)?)\s+ordered/i.exec(it.desc||'');return m?Number(m[1]):0}
+/* no order-number match: suggest a later invoice, same route, same product, same quantity as ordered, not already used by another backorder */
+function suggestFor(d,it,claimed){
+  var oq=orderedQty(it),hit=null;if(!oq)return null;
+  invoices.forEach(function(v){
+    if(hit||v.invoice===d.invoice||claimed[v.invoice]||String(v.route)!==String(d.route)||v.date<d.date)return;
+    (v.items||[]).forEach(function(o){if(!hit&&sameItem(o,it)&&(Number(o.qty)||0)===oq)hit=v});
+  });
+  return hit;
+}
 function missingList(){
-  var out=[];
+  var out=[],claimed={};
   invoices.forEach(function(d){zeroLines(d).forEach(function(x){
     var k=missKey(d,x),by=deliveredBy(d,x.it);
-    out.push({d:d,it:x.it,key:k,by:by,dismissed:!!missDismissed[k]});
+    if(by)claimed[by.invoice]=1;
+    out.push({d:d,it:x.it,i:x.i,key:k,by:by,dismissed:!!missDismissed[k]});
   })});
+  out.forEach(function(m){if(!m.by)m.sug=suggestFor(m.d,m.it,claimed)});
   return out.sort(function(a,b){return a.d.date<b.d.date?1:-1});
 }
 function renderMissing(){
@@ -787,10 +958,10 @@ function renderMissing(){
   if(!open.length){el.innerHTML='';el.hidden=true;return}
   el.hidden=false;
   el.innerHTML='<div class="alert"><div><b>'+open.length+' item'+(open.length===1?'':'s')+' billed at 0: find the invoice that delivers '+(open.length===1?'it':'them')+'</b>'+
-    '<p>These invoices list an item with 0 shipped or $0.00. It usually comes on a later invoice for the same order. Add that invoice and the alert clears on its own. If it was never delivered, press Not coming.</p></div>'+
+    '<p>These invoices list an item ordered but shipped 0 ($0.00). No gallons are counted for it. It comes on a later invoice for the same order: add that invoice and the alert clears on its own, and the gallons are counted once, on the delivery invoice. If it was never delivered, press Not coming.</p></div>'+
     '<ul class="misslist">'+open.map(function(m){
-      return '<li><span><b>Missing '+esc(itemName(m.it))+'</b> on '+invLink(m.d.invoice)+', '+esc(rlabel(m.d.route).toLowerCase())+techOf(m.d.route)+', '+esc(dlabel(m.d.date))+(m.d.order?', order '+esc(m.d.order):'')+'</span>'+
-        '<button class="btn" type="button" data-missok="'+esc(m.key)+'">Not coming</button></li>';
+      return '<li><span><b>Missing '+esc(itemName(m.it))+'</b> on '+invLink(m.d.invoice)+', route '+esc(m.d.route)+techOf(m.d.route)+', '+esc(dlabel(m.d.date))+(m.d.order?', order '+esc(m.d.order):'')+(m.sug?'<small>Possible delivery, please confirm: '+invLink(m.sug.invoice)+', route '+esc(m.sug.route)+', '+esc(mmdd(m.sug.date))+', different order number '+esc(m.sug.order||'')+'</small>':'')+'</span>'+
+        (m.sug?'<button class="btn" type="button" data-fixinv="'+esc(m.d.invoice)+'" data-fixi="'+m.i+'" data-fixby="'+esc(m.sug.invoice)+'">Confirm it was delivered</button>':'')+'<button class="btn" type="button" data-missok="'+esc(m.key)+'">Not coming</button></li>';
     }).join('')+'</ul></div>';
 }
 function zeroAlert(d){
@@ -799,10 +970,53 @@ function zeroAlert(d){
     '<p>You can still add it. After it is added, the tally keeps an alert at the top until the invoice that delivers '+(z.length===1?'this item':'these items')+(d.order?' (same order, '+esc(d.order)+')':'')+' is added.</p></div></div>';
 }
 
+/* ---------- items taken from our own stock: no invoice, no cost ---------- */
+var STOCK_ITEMS=[['chlorine','Liquid chlorine','GAL'],['tabs','3" Xtreme tabs (50#)','PL'],['acid','Muriatic acid (bottles)','BTL'],['salt','Salt','BAG'],['bicarb','Bicarb','BAG'],['other','Something else','EA']];
 function isStock(v){return v&&v.source==='stock'}
-function phBadge(v){return v&&v.source==='phone'?' <span class="pill ph-badge">Phone order, no invoice yet (est.)</span>':''}
-function phNote(n){return n?' \u00b7 incl. '+n+' phone order'+(n===1?'':'s')+', est.':''}
-function skippedNote(){return ''}
+function todayISO(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function stockSetup(){
+  var rs=document.getElementById('stRoute');if(!rs)return;
+  var routes=Array.from(new Set(Object.keys(DEF_STOPS).concat(invoices.map(function(v){return String(v.route)})))).filter(Boolean).sort(function(a,b){return rnum(a)-rnum(b)});
+  var cur=rs.value;
+  rs.innerHTML=routes.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+' '+esc(techName(r))+'</option>'}).join('');
+  if(cur)rs.value=cur;
+  var it=document.getElementById('stItem');
+  if(!it.options.length)it.innerHTML=STOCK_ITEMS.map(function(x){return '<option value="'+x[0]+'">'+esc(x[1])+'</option>'}).join('');
+  var d=document.getElementById('stDate');if(!d.value)d.value=todayISO();
+  var names={};invoices.forEach(function(v){(v.items||[]).forEach(function(i){if(i.cat==='other')names[i.group||i.label||i.desc]=1})});
+  document.getElementById('stNames').innerHTML=Object.keys(names).sort().map(function(n){return '<option value="'+esc(n)+'">'}).join('');
+  document.getElementById('stNameLbl').hidden=it.value!=='other';
+  document.getElementById('stList').innerHTML='';
+}
+document.addEventListener('change',function(e){if(e.target&&e.target.id==='stItem')document.getElementById('stNameLbl').hidden=e.target.value!=='other'});
+document.addEventListener('click',function(e){
+  var del=e.target.closest('[data-stdel]');
+  if(del){var id=del.getAttribute('data-stdel');if(!dbRef)return;
+    dbRef.doc('invoices/'+id).delete().then(function(){document.getElementById('stStatus').textContent='Removed.'}).catch(function(){document.getElementById('stStatus').textContent='Could not remove that. Ask the owner for edit access.'});return}
+  if(!e.target.closest('#stAdd'))return;
+  var st=document.getElementById('stStatus'),k=document.getElementById('stItem').value,def=STOCK_ITEMS.filter(function(x){return x[0]===k})[0];
+  var date=document.getElementById('stDate').value,route=document.getElementById('stRoute').value,qty=parseFloat(document.getElementById('stQty').value);
+  var name=document.getElementById('stName').value.trim(),note=document.getElementById('stNote').value.trim();
+  if(!date||!route){st.textContent='Pick a date and a route.';return}
+  if(!(qty>0)){st.textContent='Enter how many were taken.';return}
+  if(k==='other'&&!name){st.textContent='Type what was taken, for example White net.';return}
+  if(!dbRef){st.textContent='The saved tally is not available in this view.';return}
+  var label=k==='other'?name:k==='chlorine'?'gal liquid chlorine':k==='acid'?'muriatic acid (bottles)':k==='tabs'?'50# 3in Xtreme tabs':k==='salt'?'bag salt':'bag bicarb';
+  var it={cat:k,desc:(k==='other'?name:def[1])+' (from stock)',ext:0,label:label,price:0,qty:qty,sku:'',um:def[2]};
+  if(k==='other')it.group=name;
+  var id='STOCK-'+date.replace(/-/g,'')+'-R'+route+'-'+Date.now().toString(36).toUpperCase();
+  var doc={date:date,invoice:id,order:'',route:route,source:'stock',total:0,note:note,at:Date.now(),items:[it]};
+  st.textContent='Saving...';
+  dbRef.doc('invoices/'+id).set(doc).then(function(){
+    st.textContent='Added '+itemText(it)+' to route '+route+'.';
+    document.getElementById('stQty').value='1';document.getElementById('stNote').value='';document.getElementById('stName').value='';
+  }).catch(function(){st.textContent='That could not be saved. Ask the owner for edit access.'});
+});
+
+function skippedNote(){
+  if(!skipped.length)return '';
+  return '<div class="note"><b>Not counted</b><br>'+skipped.map(function(s){return esc(s.title)+': '+esc(s.reason)}).join('<br>')+'</div>';
+}
 
 /* ---------- detail card ---------- */
 function collect(f){
@@ -860,9 +1074,12 @@ function invDetail(id){
   h+='<div class="scroll"><table><thead><tr><th class="l">Product</th><th class="l">SKU</th><th>Quantity</th><th>Price</th><th>Amount</th></tr></thead><tbody>';
   (v.items||[]).forEach(function(it){
     var acid=it.cat==='acid';
-    h+='<tr><td class="l">'+esc(it.desc||it.label)+'</td><td class="l mono">'+esc(it.sku)+'</td><td class="m'+(acid?' acid':'')+'">'+esc(qtyText(it))+'</td><td class="m">'+money(it.price)+' / '+esc(String(it.um||'').toLowerCase())+'</td><td class="m">'+money(it.ext)+'</td></tr>';
+    var zl=zeroLines({items:[it]}).length,by=zl?deliveredBy(v,it):null;
+    h+='<tr><td class="l">'+esc(it.desc||it.label)+(zl?(by?'<small>Backorder delivered on '+invLink(by.invoice)+', '+esc(mmdd(by.date))+'</small>':'<small class="bad-t">Backorder still open: not delivered yet</small>'):'')+'</td><td class="l mono">'+esc(it.sku)+'</td><td class="m'+(acid?' acid':'')+'">'+esc(qtyText(it))+'</td><td class="m">'+money(it.price)+' / '+esc(String(it.um||'').toLowerCase())+'</td><td class="m">'+money(it.ext)+'</td></tr>';
   });
   h+='</tbody><tfoot><tr><td>Invoice total</td><td></td><td></td><td></td><td class="m">'+money(v.total)+'</td></tr></tfoot></table></div>';
+  var fu=[];invoices.forEach(function(o){if(o.invoice===v.invoice)return;(o.items||[]).forEach(function(z){if(zeroLines({items:[z]}).length){var b=deliveredBy(o,z);if(b&&b.invoice===v.invoice)fu.push(o.invoice)}})});
+  if(fu.length)h+='<div class="note">This invoice delivers the backordered item from '+Array.from(new Set(fu)).map(function(x){return invLink(x)}).join(', ')+'. The gallons are counted here, not on the $0 line.</div>';
   h+='<div>'+(off===0?'<span class="pill ok">Lines add up to the printed total</span>':'<span class="pill bad">Lines are off by '+money(off)+'</span>')+'</div></div>';
   return h;
 }
@@ -875,12 +1092,14 @@ function renderDetail(scroll){
 }
 
 function render(){
-  renderMonths();renderVendors();renderStats();renderTabs();renderDates();renderAlerts();renderMissing();
+  if(window.__tally&&window.__tally.phone)window.__tally.phone.onRender();
+  renderMonths();renderVendors();renderStats();renderTabs();renderDates();renderMissing();renderAlerts();stockSetup();renderSchedBox();
+  document.getElementById('csv').hidden=!invoices.length;
   var p=document.getElementById('panel');
   if(!loaded.inv){return}
-  if(!monthInv().length&&tab!=='analytics'){p.innerHTML='<div class="empty">No invoices for '+esc(monthLabel(curView()))+' yet. </div>'+(curView()>=PE_FROM&&!schedFor(curView()).length?'':'');renderDetail();return}
+  if(!monthInv().length&&tab!=='analytics'){p.innerHTML='<div class="empty">No invoices for '+esc(monthLabel(curView()))+' yet. Press Paste invoices to add them.</div>'+(curView()>=PE_FROM&&!schedFor(curView()).length?'<div class="note">Add this month\'s weekly schedule too, for the Analytics tab. <button class="linkbtn" type="button" data-opensched="1">Add the weekly schedule</button></div>':'');renderDetail();return}
   var list=visible(),h='';
-  if(tab==='route'){h=matrix(list,true,'')+'<div class="note">Route is the "Customer P/O number" on each SCP invoice. Proline invoices are filed under the route or tech named on them; use the vendor buttons to split them out. Click a route, or any number in the table, to see the dates behind it. A product bought 2 or more times gets its own column; one-offs stay under Other items. Invoices are added from the Claude tally page; this page only reads them.</div>';}
+  if(tab==='route'){h=matrix(list,true,'')+'<div class="note">Route is the "Customer P/O number" on each SCP invoice. Proline invoices are filed under the route or tech named on them; use the vendor buttons to split them out. Click a route, or any number in the table, to see the dates behind it. A product bought 2 or more times gets its own column; one-offs stay under Other items. Type a pool tech name in the box and it is saved for every viewer.</div>';}
   else if(tab==='day'){
     var ds=Array.from(new Set(list.map(function(v){return v.date}))).sort().reverse();
     h=ds.map(function(d){return '<div class="day"><h2>'+esc(dlabel(d))+'</h2>'+matrix(list.filter(function(v){return v.date===d}),true,d)+'</div>'}).join('');
@@ -896,6 +1115,12 @@ function render(){
 document.addEventListener('click',function(e){
   var mb=e.target.closest('[data-month]');
   if(mb){monthSel=mb.getAttribute('data-month');dateSel='all';detail=null;render();return}
+  var fx=e.target.closest('[data-fixinv]');
+  if(fx&&dbRef){var fd=invoices.filter(function(v){return v.invoice===fx.getAttribute('data-fixinv')})[0],fi=parseInt(fx.getAttribute('data-fixi'),10);
+    if(fd&&fd.items&&fd.items[fi]){var nd=JSON.parse(JSON.stringify(fd));nd.items[fi].fulfilledBy=fx.getAttribute('data-fixby');dbRef.doc('invoices/'+nd.invoice).set(nd).catch(function(){})}return}
+  var mk=e.target.closest('[data-missok]');
+  if(mk){var k=mk.getAttribute('data-missok');missDismissed=Object.assign({},missDismissed);missDismissed[k]=true;renderMissing();
+    if(missRef)missRef.set({dismissed:missDismissed}).catch(function(){});return}
   var b=e.target.closest('[data-act]');
   if(b){
     var a=b.getAttribute('data-act');
@@ -911,17 +1136,454 @@ document.addEventListener('click',function(e){
 });
 document.getElementById('dateSel').addEventListener('change',function(e){dateSel=e.target.value;render()});
 
+function saveCfg(patch){
+  var next=Object.assign({},cfg,patch);
+  cfg=next;
+  if(!cfgRef)return;
+  cfgRef.set({bottlePrice:next.bottlePrice,perBox:next.perBox,techs:next.techs,aliases:next.aliases||{}}).catch(function(){
+    var p=document.getElementById('panel');
+    p.insertAdjacentHTML('afterbegin','<div class="note">That change could not be saved. Ask the owner for edit access.</div>');
+  });
+}
 document.addEventListener('change',function(e){
-  var el=e.target;if(!el||!el.classList)return;
-  if(el.classList.contains('stin')){var st=Object.assign({},an.stops);st[el.getAttribute('data-route')]=Math.max(0,parseInt(el.value,10)||0);saveAn({stops:st});render()}
+  var el=e.target;
+  if(el.classList&&el.classList.contains('techin')){
+    var techs=Object.assign({},cfg.techs);techs[el.getAttribute('data-route')]=el.value.trim();
+    saveCfg({techs:techs});render();
+  }else if(el.classList&&el.classList.contains('stin')){var st=Object.assign({},an.stops);st[el.getAttribute('data-route')]=Math.max(0,parseInt(el.value,10)||0);saveAn({stops:st});render()}
   else if(el.id==='anwk'){var w=parseFloat(el.value);saveAn({wpm:w>0?w:4.3});render()}
   else if(el.id==='anbn'){var b=parseFloat(el.value);saveAn({bench:b>0?b:null});render()}
-  else if(el.id==='bp'){var v=parseFloat(el.value);if(v>0){cfg=Object.assign({},cfg,{bottlePrice:v});render()}}
-  else if(el.id==='pb'){var n=parseInt(el.value,10);if(n>0){cfg=Object.assign({},cfg,{perBox:n});render()}}
+  else if(el.id==='anmo'){saveAn({month:el.value});render()}
+  else if(el.id==='bp'){var v=parseFloat(el.value);if(v>0){saveCfg({bottlePrice:v});render()}}
+  else if(el.id==='pb'){var n=parseInt(el.value,10);if(n>0){saveCfg({perBox:n});render()}}
 });
 
+document.getElementById('csv').addEventListener('click',async function(){
+  var q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
+  var lines=[['date','route','pool_tech','invoice','order','product','description','unit','qty','price','line_total','acid_bottles','vendor'].join(',')];
+  invoices.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:rnum(a.route)-rnum(b.route)}).forEach(function(v){
+    (v.items||[]).forEach(function(i){
+      lines.push([v.date,v.route,q(techLabel(v.route)),v.invoice,v.order,i.sku,q(i.desc),i.um,i.qty,i.price,i.ext,i.cat==='acid'?bottlesOf(i):'',isPro(v)?'Proline':'SCP'].join(','));
+    });
+  });
+  var blob=new Blob([lines.join('\n')],{type:'text/csv'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='chemical-tally.csv';document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);
+});
+
+/* ---------- paste invoices ---------- */
+var dbRef=null,sampleFn=null,imgCap=null,pend=[],found=null,busy=false,converting=false,ctl=null,hints={};
+var CATLIST=['chlorine','acid','bicarb','tabs','salt','other'];
+var NEEDS_LOOK=['unreadable','partial','blank','unaccounted','other_customer'];
+var PROMPT=[
+'You are reading supplier invoices billed to Dr. Pool (Access Business Inc dba Dr. Pool, 2850 Glades Circle, Weston). There are TWO vendors and a file can mix them page by page. SCP Distributors (Fort Lauderdale B7, customer 121328, invoice numbers like B7980571, columns OPEN / PCK-QTY / SHP-QTY / B/O) and Proline Distributors (logo PROLINE, Boca Raton / Riviera Beach / Davie, customer 13911, all-digit 7 digit invoice numbers like 4515730, "Ordered By:" line, columns ORD / SHIP / BO). Decide the vendor for every page from its header and give it as "vendor": "SCP" or "Proline". Reply with only JSON in this shape:',
+'{"invoices":[{"invoice":"B7977769","order":"B7122015","orderDate":"2026-10-16","date":"2026-10-16","vendor":"SCP","route":"3","total":159.30,"items":[{"sku":"AAA-50-1010","desc":"Bulk chlorine sod hypo","um":"GAL","qty":90,"price":1.77,"ext":159.30,"cat":"chlorine","label":"gal liquid chlorine"}]}],"pages":[{"page":1,"status":"invoice","invoice":"B7977769","note":""}]}',
+'Rules:',
+'- One object per invoice. Use the printed INVOICE # (B7......). A page marked INVOICE REPRINT is still an invoice; use its own number.',
+'- date: the invoice DATE as YYYY-MM-DD (printed MM/DD/YY, year 20YY). orderDate: the ORDER DATE box in the same format; it can differ from the invoice date. A web printout with no order date: leave orderDate empty.',
+'- route: digits only from CUSTOMER P/O NUMBER ("ROUTE 3" gives "3").',
+'- total: the INVOICE TOTAL box. items: every product line, with sku (PRODUCT), desc (a clean product name), um (U/M as printed, uppercase), qty (SHP-QTY), price, ext (EXTENSION). Ignore the hazmat shipping rows under each line.',
+'- cat: chlorine for sku AAA-50-1010; acid for AAA-50-8602 (keep um as printed, CS or BTL); bicarb for AAA-50-8604; tabs for EZC-50-3850; salt for USC-50-1040; anything else is other.',
+'- Chlorine sold by the JUG is 2.5 gallons each: set qty to gallons (jugs x 2.5), um to GAL, keep ext as printed, and write "N jugs x 2.5 gal" in desc.',
+'- SHIPPED, NOT ORDERED: qty is always SHP-QTY, never the OPEN/ordered column. A line printed with XXXXX in SHP-QTY, 0 PCK-QTY and 0.00 extension was ordered but not shipped (backordered): give qty 0, ext 0, and write "(N ordered, 0 shipped, backordered)" in desc. Never count gallons for it. Also read the ORDER DATE box (orderDate) and the ORDER # for every invoice.',
+'- Always give label, a short plain name such as "gal liquid chlorine", "muriatic acid (cases)", "bag bicarb", "50# 3in Xtreme tabs", "bag salt". For cat other also give group, a short common name used to total the same product across invoices (for example "Calcium" for cal chlor, "Perlite", "Jerry jug", "Scrub pad").',
+'- PROLINE pages (vendor "Proline"): invoice = the Invoice # box (digits only, for example 4515730); order = the Order # box; date = the Date box; orderDate = the date part of OE Date/Time (YYYY-MM-DD); total = AMOUNT DUE. Every line has ITEM #, description, ORD, SHIP, BO, U/M, UNIT PRICE, AMOUNT. qty is always SHIP, never ORD. A line with SHIP 0 or blank and a BO quantity, or an AMOUNT of 0.00, was not shipped: qty 0, ext 0, and "(N ordered, 0 shipped, backordered)" in desc.',
+'- PROLINE route: take the digits from "Ordered By" (for example "ALDO ROUTE 3" is route 3) or from the handwritten or typed Customer P.O. (for example "route 8", "rt 11"). A printed route number always wins over a name. If only a tech name is given, use the name list below. Put the P.O. and Ordered By text in "note", for example "P.O.: evaldo; ordered by Aldo Route 3".',
+'- PROLINE products (use these exactly): ProClean bleach 1 gallon (ITEM 1, U/M GAL): sku "1", desc "ProClean bleach 1 gallon, pickup only (5.25%-12.5%)", cat chlorine, label "gal liquid chlorine", gpu 1, qty in gallons. A 2.5 gallon jug is gpu 2.5 with qty in gallons (jugs x 2.5). Muriatic acid 1 gallon (ITEM 3, $5.00 per gallon): sku "3", desc "Muriatic acid 1 gallon, pickup only (billed per gallon)", um BTL, cat acid, label "muriatic acid (bottles)", qty = gallons (each gallon is one bottle). Aqua Salt 40LB bag: sku "AQUASALT", um BAG, cat salt, label "bag salt". Sodium bicarbonate 50LB bag: sku "5800", cat bicarb, label "bag bicarb". Calcium chloride 50LB bag: sku "5806", cat other, group "Calcium chloride 50#". Imported stabilizer 100LB drum: sku "5807A", um DRM, cat other, group "Imported stabilizer 100#". Any other Proline product: sku = ITEM #, cat other, with label and group.',
+'- NOT DR. POOL: a page whose P.O. or Ordered By is only a customer or other person (a name that is not a Dr. Pool tech, with no route number), or whose Bill To is not Dr. Pool, is a customer purchase. Do not put it in invoices; give it status "other_customer" in pages and say what you see.',
+'- Copy numbers exactly. Never guess an unreadable digit. If any part of a page is too faded, cut off or blurred to trust every number, leave that page out of invoices and report it in pages.',
+'- pages: one entry per attached image, in order, numbered from 1. status is "invoice" for a page you read fully, "unreadable" for a faded, cut off or blurred page, "blank" for a page with nothing printed, or "other_customer" for an invoice billed to someone other than Dr. Pool. For anything but "invoice", give a short plain note saying what is wrong and, if you can see it, which vendor and invoice number it seems to be. Every page with status "invoice" must have its invoice in invoices.'
+].join('\n');
+
+function $(id){return document.getElementById(id)}
+function r2(n){return Math.round((Number(n)||0)*100)/100}
+function validId(s){return /^[A-Za-z0-9_\-.~:@+]{1,200}$/.test(s)}
+function validDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(s+'T12:00:00'))}
+function pstatus(msg,bad){var el=$('pasteStatus');el.textContent=msg||'';el.className=bad?'bad-t':'muted'}
+function syncRead(){
+  $('readBtn').disabled=busy||converting||!(pend.length||$('pasteText').value.trim());
+  $('stopBtn').hidden=!busy;
+}
+function drawThumbs(){
+  $('thumbs').innerHTML=pend.map(function(p,i){return '<div class="thumb"><img alt="'+esc(p.label||('Invoice page '+(i+1)))+'" src="'+p.url+'"><span class="cap">'+(i+1)+'</span><button type="button" class="x" data-rm="'+i+'" aria-label="Remove page '+(i+1)+'">&times;</button></div>'}).join('');
+  syncRead();
+}
+function inkOf(c){
+  var t=document.createElement('canvas');t.width=60;t.height=Math.max(1,Math.round(60*c.height/c.width));
+  var x=t.getContext('2d');x.drawImage(c,0,0,t.width,t.height);
+  var d=x.getImageData(0,0,t.width,t.height).data,k=0;
+  for(var i=0;i<d.length;i+=4){if(d[i]<240||d[i+1]<240||d[i+2]<240)k++}
+  return k;
+}
+async function pdfToPages(file){
+  var lib=window.pdfjsLib;
+  if(!lib)throw new Error('no pdf library');
+  try{lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}catch(x){}
+  var buf=await file.arrayBuffer();
+  var doc=await lib.getDocument({data:buf,isEvalSupported:false}).promise;
+  var out=[],ink=0;
+  try{
+    for(var n=1;n<=doc.numPages;n++){
+      pstatus('Opening '+file.name+', page '+n+' of '+doc.numPages+'...');
+      var page=await doc.getPage(n);
+      var v0=page.getViewport({scale:1}),sc=Math.min(2.2,1500/Math.max(v0.width,v0.height)),vp=page.getViewport({scale:sc});
+      var c=document.createElement('canvas');c.width=Math.max(1,Math.floor(vp.width));c.height=Math.max(1,Math.floor(vp.height));
+      var ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+      await page.render({canvasContext:ctx,viewport:vp}).promise;
+      ink+=inkOf(c)>=3?1:0;
+      var blob=await new Promise(function(res){c.toBlob(res,'image/jpeg',0.88)});
+      if(!blob)throw new Error('no image');
+      out.push({blob:blob,n:n,of:doc.numPages});
+      try{page.cleanup()}catch(x){}
+    }
+  }finally{try{doc.destroy()}catch(x){}}
+  if(out.length&&!ink)throw new Error('blank');
+  return out;
+}
+async function addFiles(list){
+  var arr=Array.prototype.slice.call(list||[]),rej=0,bad=[],before=pend.length;
+  converting=true;syncRead();
+  for(var i=0;i<arr.length;i++){
+    var f=arr[i];
+    if(/^image\/(jpeg|png|webp|gif)$/.test(f.type)){
+      pend.push({file:f,url:URL.createObjectURL(f),label:f.name||''});
+    }else if(f.type==='application/pdf'||/\.pdf$/i.test(f.name||'')){
+      try{
+        var pgs=await pdfToPages(f);
+        pgs.forEach(function(x){pend.push({file:x.blob,url:URL.createObjectURL(x.blob),label:(f.name||'PDF')+', page '+x.n+' of '+x.of})});
+      }catch(x){bad.push({name:f.name||'PDF',why:!window.pdfjsLib?'lib':(x&&x.message==='blank'?'blank':'open')})}
+    }else rej++;
+  }
+  converting=false;
+  var msg=[],isBad=false;
+  bad.forEach(function(b){
+    msg.push(b.why==='lib'?'PDF reading did not load in this view. Take screenshots of the pages instead.':b.why==='blank'?b.name+' came out blank in this browser. Take screenshots of its pages instead.':b.name+' could not be opened. It may be damaged or password protected. Try screenshots of its pages instead.');
+    isBad=true;
+  });
+  if(rej){msg.push(rej+(rej===1?' file was':' files were')+' skipped. Only PDFs, screenshots and photos can be read here.');isBad=true}
+  var added=pend.length-before;
+  if(!isBad&&added)msg.push(added+' page'+(added===1?'':'s')+' ready. Press Read invoices.');
+  pstatus(msg.join(' '),isBad);
+  drawThumbs();
+}
+function normInv(r){
+  var items=(Array.isArray(r.items)?r.items:[]).map(function(i){
+    var cat=CATLIST.indexOf(i.cat)>=0?i.cat:'other';
+    var o={cat:cat,desc:String(i.desc||''),ext:r2(i.ext),label:String(i.label||i.desc||''),price:r2(i.price),qty:Number(i.qty)||0,sku:String(i.sku||''),um:String(i.um||'').toUpperCase()};
+    if(cat==='other')o.group=String(i.group||i.label||i.desc||'Other');
+    if(cat==='chlorine'&&Number(i.gpu)>0)o.gpu=Number(i.gpu);
+    if(o.ext===0&&o.price>0&&!/msds/i.test(o.desc)&&o.sku.toUpperCase()!=='CP'){
+      /* ordered but shipped 0 (XXXXX): count nothing, remember what was ordered */
+      if(o.qty>0&&!/ordered/i.test(o.desc))o.desc=o.desc+' ('+o.qty+' ordered, 0 shipped, backordered)';
+      o.qty=0;
+    }
+    return o;
+  });
+  var route=String(r.route==null?'':r.route),digits=route.replace(/[^0-9]/g,'');
+  var inv=String(r.invoice||'').trim().replace(/^#/,'');
+  var vd=/^proline/i.test(String(r.vendor||''))?'Proline':/^scp/i.test(String(r.vendor||''))?'SCP':(/^\d{5,9}$/.test(inv)?'Proline':'SCP');
+  if(/^B\d/i.test(inv))vd='SCP';else if(/^\d{5,9}$/.test(inv))vd='Proline';
+  var o={date:String(r.date||''),invoice:inv,items:items,order:String(r.order||''),orderDate:validDate(String(r.orderDate||''))?String(r.orderDate):'',route:digits||routeFrom(route),total:r2(r.total)};
+  if(vd==='Proline'){o.vendor='Proline';var nt=String(r.note||'').trim();if(nt)o.note=nt.slice(0,300)}
+  return o;
+}
+function checkOff(d){return r2(d.items.reduce(function(s,i){return s+i.ext},0)-d.total)}
+function sig(items){return (items||[]).map(function(i){var z=r2(i.ext)===0&&(Number(i.price)||0)>0&&!/msds/i.test(i.desc||'');return [i.sku,z?0:(Number(i.qty)||0),r2(i.ext)].join('|')}).sort().join(';')}
+function tallyDiff(d){
+  var t=invoices.filter(function(v){return v.invoice===d.invoice})[0];
+  if(!t)return null;
+  var diffs=[];
+  if(vendOf(t)!==vendOf(d))diffs.push('the vendor is '+vendOf(t)+' in the tally and '+vendOf(d)+' on this page, with the same invoice number');
+  if(r2(t.total)!==d.total)diffs.push('the total is '+money(t.total)+' in the tally and '+money(d.total)+' on this page');
+  if(String(t.route)!==String(d.route))diffs.push('the route is '+esc(t.route)+' in the tally and '+esc(d.route)+' on this page');
+  if(t.date!==d.date)diffs.push('the date is '+esc(t.date)+' in the tally and '+esc(d.date)+' on this page');
+  if(sig(t.items)!==sig(d.items))diffs.push('the lines differ ('+(t.items||[]).length+' in the tally, '+d.items.length+' on this page)');
+  return {diffs:diffs};
+}
+function dupInBatch(i){
+  var id=found.inv[i].data.invoice;
+  for(var k=0;k<i;k++)if(found.inv[k].data.invoice===id&&vendOf(found.inv[k].data)===vendOf(found.inv[i].data))return true;
+  return false;
+}
+function pageNeeds(pg){return NEEDS_LOOK.indexOf(pg.status)>=0&&!pg.skipped}
+function pageWhy(pg){
+  var m={unreadable:'is too faded, cut off or blurred to trust every number',partial:'is too faded, cut off or blurred to trust every number',blank:'looks blank',unaccounted:'was not reported back by Claude',other_customer:'looks billed to someone other than Dr. Pool'};
+  return m[pg.status]||'needs a look';
+}
+function setPage(idx,obj){
+  found.pages=found.pages.filter(function(p){return p.idx!==idx});
+  found.pages.push(obj);
+  found.pages.sort(function(a,b){return a.idx-b.idx});
+}
+function renderPreview(){
+  var box=$('preview');
+  if(!found){box.innerHTML='';return}
+  var h='',n=0,rep=0,matched=0,fresh=0,pageAl='',rowAl='',blockers=0;
+  var total=pend.length;
+  found.pages.forEach(function(pg){
+    if(!pageNeeds(pg))return;
+    blockers++;
+    var p=pend[pg.idx];
+    pageAl+='<div class="alert"><div class="ahead">'+(p?'<img class="athumb" src="'+p.url+'" alt="Page '+(pg.idx+1)+'">':'')+
+      '<div><b>Page '+(pg.idx+1)+' of '+total+(p&&p.label?' ('+esc(p.label)+')':'')+' was not counted</b><p>This page '+esc(pageWhy(pg))+'.'+(pg.note?' '+esc(pg.note):'')+' It may be an invoice that is missing from the tally.</p></div></div>'+
+      '<label for="hint-'+pg.idx+'">What can you see on this page? Invoice number, date, route, items, total. Anything helps.</label>'+
+      '<textarea id="hint-'+pg.idx+'" rows="3" data-hint="'+pg.idx+'" placeholder="For example: B7977xxx, route 4, 60 gal chlorine, 1 box acid">'+esc(hints[pg.idx]||'')+'</textarea>'+
+      '<div class="row"><button class="btn primary" type="button" data-reread="'+pg.idx+'"'+(busy?' disabled':'')+'>Read again with this note</button><button class="btn" type="button" data-skip="'+pg.idx+'">Skip this page</button><span class="muted">Or add a clearer screenshot above and press Read invoices again.</span></div></div>';
+  });
+  var rows='';
+  found.inv.forEach(function(e,i){
+    var d=e.data,off=checkOff(d),okId=validId(d.invoice),okRoute=!!d.route,okDate=validDate(d.date);
+    var diff=tallyDiff(d),inTally=!!diff,same=inTally&&!diff.diffs.length,batch=dupInBatch(i);
+    var incomplete=!okId||!okRoute||!okDate;
+    var blocked=batch||same||incomplete;
+    if(blocked)e.on=false;
+    if(same)matched++;else if(!inTally)fresh++;
+    if(e.on){if(inTally)rep++;else n++}
+    var pill=batch?'<span class="pill bad">Repeated in this batch</span>':same?'<span class="pill neutral">In tally, matches</span>':inTally?'<span class="pill bad">In tally, differs</span>':incomplete?'<span class="pill bad">Missing info</span>':off!==0?'<span class="pill bad">Off by '+money(off)+'</span>':'<span class="pill ok">Lines add up</span>';
+    if(!batch&&!same&&incomplete){
+      var miss=[];if(!okId)miss.push('invoice number');if(!okRoute)miss.push('route');if(!okDate)miss.push('date');
+      rowAl+='<div class="alert"><div><b>Invoice '+esc(d.invoice||'(no number)')+' is missing its '+miss.join(', ')+'</b><p>Type it in the table below. It cannot be added until it is filled in.</p></div></div>';
+    }
+    if(!batch&&!same&&!incomplete&&!inTally&&off!==0){
+      rowAl+='<div class="alert"><div><b>Invoice '+esc(d.invoice)+' does not add up</b><p>The lines add to '+money(r2(d.items.reduce(function(s,x){return s+x.ext},0)))+' but the invoice total is '+money(d.total)+'. A line may be misread or missing.</p></div>'+
+        (e.page>=0&&pend[e.page]?'<div class="row"><button class="btn" type="button" data-rereadinv="'+i+'"'+(busy?' disabled':'')+'>Read this page again</button><span class="muted">You can still tick it in the table if the page itself is right.</span></div>':'')+'</div>';
+    }
+    if(inTally&&!same){
+      rowAl+='<div class="alert"><div><b>Invoice '+esc(d.invoice)+' is already in the tally but this page differs</b><p>'+diff.diffs.join('; ')+'. Check which one is right. Tick Replace in the table to update the tally with this page.</p></div></div>';
+    }
+    if(!batch&&!same)rowAl+=zeroAlert(d);
+    var zc=zeroLines(d).length;if(zc)pill+=' <span class="pill bad">'+zc+' at 0</span>';
+    var dateCell=okDate?esc(dlabel(d.date)):'<input type="date" class="datein" id="pd-'+i+'" data-pd="'+i+'" value="" aria-label="Date for invoice '+esc(d.invoice)+'">';
+    var idCell=okId?esc(d.invoice)+(isPro(d)?' <span class="pill neutral">Proline</span>':''):'<input type="text" class="idin" id="pi-'+i+'" data-pi="'+i+'" value="" placeholder="B7......" aria-label="Invoice number">';
+    var items=d.items.map(function(it){var z=zeroLines({items:[it]}).length;return (z?'<b class="bad-t">':'')+esc(itemText(it))+(z?'</b>':'')}).join(', ');
+    rows+='<tr><td class="l"><input type="checkbox" id="pv-'+i+'" data-pv="'+i+'"'+(e.on?' checked':'')+(blocked?' disabled':'')+' aria-label="'+(inTally?'Replace':'Add')+' invoice '+esc(d.invoice)+'"></td>'+
+      '<td class="l mono">'+idCell+'</td><td>'+dateCell+'</td>'+
+      '<td><input type="text" class="routein" id="pr-'+i+'" data-pr="'+i+'" value="'+esc(d.route)+'" aria-label="Route for invoice '+esc(d.invoice)+'"></td>'+
+      '<td class="l" style="white-space:normal;min-width:240px">'+items+'</td><td class="m">'+money(d.total)+'</td><td class="l">'+pill+'</td></tr>';
+  });
+  var needCount=blockers+(rowAl.match(/class="alert"/g)||[]).length;
+  var chips='<div class="chips">'+
+    (total?'<span class="pill neutral">'+total+' page'+(total===1?'':'s')+' sent</span>':'')+
+    '<span class="pill neutral">'+found.inv.length+' invoice'+(found.inv.length===1?'':'s')+' read</span>'+
+    '<span class="pill neutral">'+matched+' already in tally and matching</span>'+
+    '<span class="pill '+(fresh?'ok':'neutral')+'">'+fresh+' new</span>'+
+    '<span class="pill '+(needCount?'bad':'ok')+'">'+needCount+' need'+(needCount===1?'s':'')+' your attention</span></div>';
+  if(busy&&!found.inv.length&&!found.pages.length){box.innerHTML='';return}
+  h+=chips;
+  if(pageAl||rowAl)h+='<div class="alerts" role="alert">'+pageAl+rowAl+'</div>';
+  if(found.inv.length){
+    h+='<div class="scroll"><table><thead><tr><th class="l">Add</th><th class="l">Invoice</th><th>Date</th><th>Route</th><th class="l">Items</th><th>Total</th><th class="l">Check</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    var label=n||rep?(n?'Add '+n+' invoice'+(n===1?'':'s')+' to the tally':'')+(n&&rep?' and ':'')+(rep?(n?'replace ':'Replace ')+rep+' in the tally':''):'Nothing new to add';
+    h+='<div class="row"><button class="btn primary" id="addBtn" type="button"'+((n||rep)&&!busy&&!blockers?'':' disabled')+'>'+esc(label)+'</button><span class="'+(blockers?'bad-t':'muted')+'">'+(blockers?'Answer or skip the page alerts above first.':'Fix a route here if it was misread. An invoice already in the tally is only replaced if you tick it.')+'</span></div>';
+  }else if(!busy&&!pageAl){
+    h+='<div class="empty">No invoices were found on these pages. SCP (B-numbers) and Proline (7 digit numbers) invoices billed to Dr. Pool can be read. Try a clearer screenshot, or paste the invoice text.</div>';
+  }
+  if(found.skipped.length)h+='<div class="note"><b>Not counted</b><br>'+found.skipped.map(function(s){return esc(s.title)+': '+esc(s.reason)}).join('<br>')+'</div>';
+  box.innerHTML=h;
+  if(window.__tally&&window.__tally.phone)window.__tally.phone.onPreview(box);
+}
+function copyFor(code){
+  var m={rate_limited:'Too many requests right now. Wait a minute, then try again.',image_rejected:'One of the images could not be read. Try a different screenshot.',invalid_json:'Claude could not return the invoices in a readable form. Try again, or send fewer pages at a time.',not_granted:'Reading is turned off for this view. Allow Claude for this page and try again.',sampling_disabled:'Reading is not available on this account.',session_expired:'Your session expired. Sign in again.',images_unavailable:'Images cannot be sent from this view. Paste the invoice text instead.'};
+  return m[code]||'Something went wrong while reading. Try again.';
+}
+function buildPrompt(job){
+  var p=PROMPT+aliasPrompt();
+  if(job.files)p+='\n\n'+job.files.length+' image'+(job.files.length===1?' is':'s are')+' attached, in order. Report on every one in pages, numbered 1 to '+job.files.length+'.';
+  if(job.hint)p+='\n\nThe viewer says about this page: '+job.hint.slice(0,2000)+'\nUse it only to fill in what the image cannot show. If you still cannot trust every number, report the page as unreadable.';
+  if(job.text)p+='\n\nInvoice text:\n'+job.text.slice(0,200000);
+  return p;
+}
+function mergeResult(res,job){
+  var list=Array.isArray(res)?res:(res&&Array.isArray(res.invoices)?res.invoices:[]);
+  var pgs=res&&Array.isArray(res.pages)?res.pages:[];
+  var seen={},idxs=job.idxs||[];
+  pgs.forEach(function(pg){
+    var k=(Number(pg&&pg.page)||0)-1;
+    if(k<0||k>=idxs.length)return;
+    seen[idxs[k]]=1;
+    setPage(idxs[k],{idx:idxs[k],status:String(pg.status||'invoice'),invoice:String(pg.invoice||''),note:String(pg.note||''),skipped:false});
+  });
+  idxs.forEach(function(idx){if(!seen[idx])setPage(idx,{idx:idx,status:'unaccounted',note:'',skipped:false})});
+  list.forEach(function(r){
+    var d=normInv(r||{}),pg=-1;
+    pgs.forEach(function(x){var k=(Number(x&&x.page)||0)-1;if(k>=0&&k<idxs.length&&String(x.invoice||'').trim()===d.invoice)pg=idxs[k]});
+    if(pg<0&&idxs.length===1)pg=idxs[0];
+    found.inv.push({data:d,page:pg,on:validId(d.invoice)&&!!d.route&&validDate(d.date)&&checkOff(d)===0&&!tallyDiff(d)});
+  });
+  /* a page Claude called an invoice but returned no lines for: say so instead of dropping it silently */
+  pgs.forEach(function(pg){
+    var k=(Number(pg&&pg.page)||0)-1;if(k<0||k>=idxs.length)return;
+    if(String(pg.status||'invoice')!=='invoice')return;
+    var idx=idxs[k];
+    if(!found.inv.some(function(e){return e.page===idx}))setPage(idx,{idx:idx,status:'unreadable',invoice:String(pg.invoice||''),note:'Claude saw an invoice here'+(pg.invoice?' ('+String(pg.invoice)+')':'')+' but could not read its lines. It may be a vendor or layout it does not know, so type what you can see below.',skipped:false});
+  });
+  if(!idxs.length){
+    var sk=res&&Array.isArray(res.skipped)?res.skipped:[];
+    sk.forEach(function(s){found.skipped.push({title:String((s&&s.title)||'Pasted text'),reason:String((s&&s.reason)||'not an invoice')})});
+  }
+}
+async function runJobs(jobs,label){
+  busy=true;ctl=new AbortController();syncRead();renderPreview();
+  try{
+    for(var j=0;j<jobs.length;j++){
+      pstatus((label||'Reading')+(jobs.length>1?' part '+(j+1)+' of '+jobs.length:'')+'...');
+      var job=jobs[j],opts={signal:ctl.signal,cache:false};
+      if(job.files)opts.images=job.files;
+      var res=await sampleFn.json(buildPrompt(job),opts);
+      mergeResult(res,job);
+      renderPreview();
+    }
+    var bad=found.pages.filter(pageNeeds).length;
+    pstatus(bad?bad+' page'+(bad===1?'':'s')+' need'+(bad===1?'s':'')+' your attention.':found.inv.length?'Check the rows below, then press Add.':'',!!bad);
+  }catch(e){
+    if(e&&e.code==='cancelled')pstatus('Stopped.');
+    else pstatus(copyFor(e&&e.code),true);
+  }finally{
+    busy=false;ctl=null;syncRead();renderPreview();
+  }
+}
+async function readInvoices(){
+  if(!sampleFn||busy)return;
+  var text=$('pasteText').value.trim(),jobs=[],per=Math.max(1,Math.min(4,(imgCap&&imgCap.maxCount)||4));
+  for(var i=0;i<pend.length;i+=per){
+    var idxs=[];for(var k=i;k<Math.min(i+per,pend.length);k++)idxs.push(k);
+    jobs.push({idxs:idxs,files:idxs.map(function(x){return pend[x].file})});
+  }
+  if(text)jobs.push({text:text});
+  if(!jobs.length)return;
+  found={inv:[],pages:[],skipped:[]};hints={};
+  await runJobs(jobs,'Reading');
+}
+async function rereadPage(idx,invIndex){
+  if(!sampleFn||busy||!found||!pend[idx])return;
+  var hint=(hints[idx]||'').trim();
+  if(invIndex!==undefined&&found.inv[invIndex]&&!hint){
+    var d=found.inv[invIndex].data;
+    hint='The lines must add up to the invoice total of '+d.total+'. Check each line against the page, one at a time.';
+  }
+  found.inv=found.inv.filter(function(e){return e.page!==idx});
+  await runJobs([{idxs:[idx],files:[pend[idx].file],hint:hint}],'Reading page '+(idx+1));
+}
+async function addSelected(){
+  if(busy||!found)return;
+  if(!dbRef){pstatus('The saved tally is not available in this view.',true);return}
+  var pick=found.inv.filter(function(e){return e.on});
+  var notes=found.skipped.slice();
+  found.pages.forEach(function(pg){if(pg.skipped)notes.push({title:'Page '+(pg.idx+1)+' of '+pend.length+(pend[pg.idx]&&pend[pg.idx].label?' ('+pend[pg.idx].label+')':'')+(pg.invoice?' ('+pg.invoice+')':''),reason:'skipped by you; '+pageWhy(pg)})});
+  if(!pick.length)return;
+  busy=true;syncRead();renderPreview();pstatus('Saving...');
+  try{
+    await Promise.all(pick.map(function(e){return dbRef.doc('invoices/'+e.data.invoice).set(e.data)}));
+    if(window.__tally&&window.__tally.phone)window.__tally.phone.afterAdd(pick);
+    var stamp=Date.now();
+    await Promise.all(notes.map(function(s,k){return dbRef.doc('skipped/scan-'+stamp+'-'+k).set({title:s.title,reason:s.reason})}));
+    pend.forEach(function(p){try{URL.revokeObjectURL(p.url)}catch(x){}});
+    pend=[];$('pasteText').value='';found=null;hints={};busy=false;
+    drawThumbs();renderPreview();
+    pstatus('Saved '+pick.length+' invoice'+(pick.length===1?'':'s')+' to the tally.');
+  }catch(e){
+    busy=false;syncRead();renderPreview();
+    pstatus('Could not save to the tally. You may need edit access to this artifact.',true);
+  }
+}
+function openPaste(open){
+  var box=$('pasteBox'),btn=$('pasteBtn');
+  box.hidden=!open;btn.setAttribute('aria-expanded',open?'true':'false');
+  if(open){try{box.scrollIntoView({block:'nearest'});$('pasteText').focus()}catch(x){}}
+}
+$('pasteBtn').addEventListener('click',function(){openPaste($('pasteBox').hidden)});
+$('pasteClose').addEventListener('click',function(){openPaste(false)});
+$('readBtn').addEventListener('click',readInvoices);
+$('stopBtn').addEventListener('click',function(){if(ctl)ctl.abort()});
+$('pasteText').addEventListener('input',syncRead);
+$('fileIn').addEventListener('change',function(e){addFiles(e.target.files);e.target.value=''});
+$('thumbs').addEventListener('click',function(e){
+  var b=e.target.closest('[data-rm]');if(!b||busy)return;
+  var i=parseInt(b.getAttribute('data-rm'),10),p=pend[i];
+  if(p){
+    try{URL.revokeObjectURL(p.url)}catch(x){}
+    pend.splice(i,1);
+    if(found){found=null;hints={};pstatus('A page was removed. Press Read invoices to check the pages again.')}
+    drawThumbs();renderPreview();
+  }
+});
+function autoOn(e){
+  var d=e.data;
+  e.on=validId(d.invoice)&&!!d.route&&validDate(d.date)&&checkOff(d)===0&&!tallyDiff(d);
+}
+$('preview').addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b||busy)return;
+  if(b.id==='addBtn'){addSelected();return}
+  var v=b.getAttribute('data-reread');
+  if(v!==null){rereadPage(parseInt(v,10));return}
+  v=b.getAttribute('data-rereadinv');
+  if(v!==null){var i=parseInt(v,10);if(found&&found.inv[i])rereadPage(found.inv[i].page,i);return}
+  v=b.getAttribute('data-skip');
+  if(v!==null&&found){
+    var pg=found.pages.filter(function(p){return p.idx===parseInt(v,10)})[0];
+    if(pg){
+      pg.skipped=true;renderPreview();
+      var bad=found.pages.filter(pageNeeds).length;
+      pstatus(bad?bad+' page'+(bad===1?'':'s')+' still need'+(bad===1?'s':'')+' your attention.':'Check the rows below, then press Add.',!!bad);
+    }
+  }
+});
+$('preview').addEventListener('change',function(e){
+  var t=e.target,v;
+  if(!found)return;
+  v=t.getAttribute('data-pv');
+  if(v!==null&&found.inv[v]){found.inv[v].on=t.checked;renderPreview();return}
+  v=t.getAttribute('data-pr');
+  if(v!==null&&found.inv[v]){found.inv[v].data.route=t.value.trim();autoOn(found.inv[v]);renderPreview();return}
+  v=t.getAttribute('data-pd');
+  if(v!==null&&found.inv[v]){found.inv[v].data.date=t.value;autoOn(found.inv[v]);renderPreview();return}
+  v=t.getAttribute('data-pi');
+  if(v!==null&&found.inv[v]){found.inv[v].data.invoice=t.value.trim();autoOn(found.inv[v]);renderPreview();return}
+});
+$('preview').addEventListener('input',function(e){
+  var v=e.target.getAttribute('data-hint');
+  if(v!==null)hints[v]=e.target.value;
+});
+document.addEventListener('paste',function(e){
+  if($('pasteBox').hidden)return;
+  var files=e.clipboardData&&e.clipboardData.files;
+  if(files&&files.length){addFiles(files);e.preventDefault()}
+});
+(function(){
+  var dz=$('drop');
+  ['dragenter','dragover'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.add('over')})});
+  ['dragleave','drop'].forEach(function(n){dz.addEventListener(n,function(e){e.preventDefault();dz.classList.remove('over')})});
+  dz.addEventListener('drop',function(e){if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length)addFiles(e.dataTransfer.files)});
+})();
+/* sampleFn (Ask Claude) does not exist on the staff site: it stays null, so PDF, screenshot and phone-order reading never turn on here. */
+
+/* ---------- tech names and aliases (Jeff = Geffet, route 0) ---------- */
+function aliasMap(){
+  var m={};
+  Object.keys(cfg.techs||{}).forEach(function(r){var n=String(cfg.techs[r]||'').trim().toLowerCase();if(n)m[n]=r});
+  var al=cfg.aliases||{};
+  Object.keys(al).forEach(function(r){(al[r]||[]).forEach(function(n){n=String(n).trim().toLowerCase();if(n)m[n]=r})});
+  return m;
+}
+function routeFrom(s){
+  var str=String(s==null?'':s).trim(),dg=str.replace(/[^0-9]/g,'');
+  if(dg)return dg;
+  if(/^\s*stock\s*$/i.test(str))return 'Stock';
+  var m=aliasMap(),low=str.toLowerCase();
+  if(m[low]!==undefined)return m[low];
+  var toks=low.split(/[^a-z]+/);
+  for(var i=0;i<toks.length;i++)if(toks[i]&&m[toks[i]]!==undefined)return m[toks[i]];
+  return str;
+}
+function aliasPrompt(){
+  var m=aliasMap(),by={};
+  Object.keys(m).forEach(function(n){(by[m[n]]=by[m[n]]||[]).push(n)});
+  var ks=Object.keys(by);if(!ks.length)return '';
+  return '\n- If the P.O. (SCP CUSTOMER P.O. NUMBER, or Proline Customer P.O. / Ordered By) holds only a tech name and no route number, give that tech\'s route, digits only: '+ks.sort(function(a,b){return rnum(a)-rnum(b)}).map(function(r){return by[r].join('/')+' = '+r}).join('; ')+'.';
+}
+
 /* ---------- price-change notifications ---------- */
-var alertAck={},alertShowAck=false,notifOpen=false;
+var alertAck={},alertRef=null,alertShowAck=false,notifOpen=false;
 var PRICE_MIN=0.02,PRICE_PCT=0.01,PRICE_WINDOW=8;
 var PW={GAL:'gal',BAG:'bag',BTL:'bottle',CS:'case',EA:'each',DRM:'drum',PL:'pail',PLT:'pail',JUG:'jug'};
 var XV={chlorine:'gal',acid:'bottle',salt:'bag',bicarb:'bag'};
@@ -1010,72 +1672,36 @@ function renderAlerts(){
   if(alertShowAck&&done.length)h+='<div class="nlist">'+done.slice(0,100).map(function(a){return row(a,true)}).join('')+'</div>';
   el.innerHTML=h;
 }
-var remoteAck={},localAck={};
-try{localAck=JSON.parse(localStorage.getItem('tally-ack')||'{}')||{}}catch(x){localAck={}}
-function mergeAck(){var m={};Object.keys(remoteAck).forEach(function(k){m[k]=1});Object.keys(localAck).forEach(function(k){if(localAck[k])m[k]=1;else delete m[k]});alertAck=m}
-function saveAck(){mergeAck();try{localStorage.setItem('tally-ack',JSON.stringify(localAck))}catch(x){}renderAlerts()}
-function setAck(id,on){localAck[id]=on?1:0;saveAck()}
+function saveAck(m){
+  alertAck=m;renderAlerts();
+  if(!alertRef)return;
+  alertRef.set({ack:m,at:Date.now()}).catch(function(){document.getElementById('panel').insertAdjacentHTML('afterbegin','<div class="note">That could not be saved. Ask the owner for edit access.</div>')});
+}
+function setAck(id,on){var m=Object.assign({},alertAck);if(on)m[id]=1;else delete m[id];saveAck(m)}
 document.addEventListener('click',function(e){
   var t=e.target;if(!t||!t.closest)return;
   if(t.closest('#bellBtn')||t.closest('[data-bell]')){notifOpen=!notifOpen;renderAlerts();return}
   var a=t.closest('[data-ack]');if(a){setAck(a.getAttribute('data-ack'),true);return}
   var u=t.closest('[data-unack]');if(u){setAck(u.getAttribute('data-unack'),false);return}
-  if(t.closest('[data-ackall]')){priceAlerts().forEach(function(x){localAck[x.id]=1});saveAck();return}
+  if(t.closest('[data-ackall]')){var m=Object.assign({},alertAck);priceAlerts().forEach(function(x){m[x.id]=1});saveAck(m);return}
   if(t.closest('[data-ackshow]')){alertShowAck=!alertShowAck;renderAlerts()}
 });
 
+/* ---------- Dr. Pool brain: connection status ---------- */
+var SB={st:'wait',err:''};
+function brainChip(){
+  var el=document.getElementById('brainChip');if(!el)return;
+  if(SB.st==='live'){el.className='pill ok';el.textContent='Brain: live · week of '+(BR.cur?dlabel(BR.cur):'?');el.title='Reading the shared Dr. Pool database (Supabase)'}
+  else if(SB.st==='wait'){el.className='pill neutral';el.textContent='Brain: connecting…';el.title=''}
+  else{el.className='pill bad';el.textContent='Brain: not reachable';el.title=SB.err||''}
+}
 
-/* ---------- data from Supabase (read-only, Office staff only) ---------- */
-var sb=DrPool.sb,BR={techs:{},weeks:[]};
-function techLabel(r){return BR.techs[r]||cfg.techs[r]||''}
-function rowToInv(r){
-  var its=(r.supplier_invoice_lines||[]).slice().sort(function(a,b){return (a.line_no||0)-(b.line_no||0)}).map(function(l){
-    var o={cat:l.category||'other',desc:l.description||'',ext:Number(l.ext)||0,label:l.label||l.description||'',price:Number(l.price)||0,qty:Number(l.qty)||0,sku:l.sku||'',um:l.um||''};
-    if(l.product_group)o.group=l.product_group;
-    if(l.fulfilled_by)o.fb=l.fulfilled_by;
-    if(l.gpu!=null&&Number(l.gpu)>0)o.gpu=Number(l.gpu);
-    return o;
-  });
-  var v={date:String(r.invoice_date||'').slice(0,10),invoice:r.invoice_no,order:r.order_no||'',route:r.route_no==null?(/stock/i.test(r.po_text||'')?'Stock':'?'):String(r.route_no),total:Number(r.total)||0,items:its};
-  if(r.supplier==='Proline')v.vendor='Proline';
-  if(r.source==='sheet'||r.source==='stock'||r.source==='phone')v.source=r.source;
-  if(r.note)v.note=r.note;
-  if(r.po_text)v.po=r.po_text;
-  if(r.order_date)v.orderDate=String(r.order_date).slice(0,10);
-  return v;
-}
-async function loadAll(){
-  var inv=[],from=0,step=500;
-  for(;;){
-    var q=await sb.from('supplier_invoices').select('supplier,invoice_no,order_no,order_date,invoice_date,route_no,total,source,note,po_text,supplier_invoice_lines(line_no,sku,description,um,qty,price,ext,category,label,product_group,gpu,fulfilled_by)').order('invoice_date',{ascending:false}).order('invoice_no').range(from,from+step-1);
-    if(q.error)throw q.error;
-    inv=inv.concat(q.data||[]);if(!q.data||q.data.length<step)break;from+=step;
-  }
-  invoices=inv.map(rowToInv);loaded.inv=true;
-  var t=await sb.from('technicians').select('route_no,name,active');
-  if(!t.error)(t.data||[]).forEach(function(x){if(x.active&&(x.route_no!=null||x.name==='Geffet'))BR.techs[String(x.route_no==null?0:x.route_no)]=x.name});
-  var st=await sb.from('tally_settings').select('key,value');
-  if(!st.error)(st.data||[]).forEach(function(x){
-    if(x.key==='config'&&x.value){var d=x.value;cfg={bottlePrice:Number(d.bottlePrice)>0?Number(d.bottlePrice):4.36,perBox:Number(d.perBox)>0?Number(d.perBox):4,techs:d.techs||{},aliases:d.aliases||{}}}
-    if(x.key==='alerts'&&x.value){remoteAck=x.value.ack||{}}
-  });
-  mergeAck();
-  var w=await sb.from('v_route_summary').select('week_of,route_no,tech_name,stops,pools,income');
-  if(!w.error){
-    var m={};(w.data||[]).forEach(function(x){
-      var k=String(x.week_of).slice(0,10),wk=m[k]||(m[k]={week:addDaysISO(k,1),brainWeek:k,src:'brain',routes:{}});
-      wk.routes[String(x.route_no)]={name:x.tech_name,pools:Number(x.pools)||0,income:Number(x.income)||0,stops:Number(x.stops)||0};
-    });
-    BR.weeks=Object.keys(m).sort().map(function(k){return m[k]});
-  }
-}
-function addDaysISO(iso,n){var d=new Date(iso+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
 /* ---------- invoice search ---------- */
 function srchRows(q){
   var toks=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
   if(!toks.length)return [];
   return invoices.filter(function(v){
-    var hay=[v.invoice,v.order,v.route,'route '+v.route,techLabel(v.route),(v.route==='0'?'geffet jeff':''),v.note,v.po||'',(v.route==='Stock'?'stock office':''),ordNote(v),v.orderDate||'',(isPro(v)?'proline':(isStock(v)?'stock':'scp'))+(v.source==='phone'?' phone order estimate':''),v.date].join(' ').toLowerCase();
+    var hay=[v.invoice,v.order,v.route,'route '+v.route,techLabel(v.route),(v.route==='0'?'geffet jeff':''),v.note,ordNote(v),v.orderDate||'',v.po||'',(v.route==='Stock'?'stock office':''),(isPro(v)?'proline':(isStock(v)?'stock':'scp'))+(v.source==='phone'?' phone order estimate':''),v.date].join(' ').toLowerCase();
     return toks.every(function(t){return hay.indexOf(t)>=0});
   }).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0});
 }
@@ -1085,7 +1711,7 @@ function drawSearch(){
   var r=srchRows(q),h='<div class="dhead"><div><h2>Search</h2><p>'+r.length+' match'+(r.length===1?'':'es')+' for &ldquo;'+esc(q)+'&rdquo; in all months, SCP and Proline'+(r.length>40?' (showing the newest 40)':'')+'</p></div><button class="btn" type="button" data-sr="close">Close</button></div>';
   if(!r.length)h+='<div class="empty">No invoice matches &ldquo;'+esc(q)+'&rdquo;. Try part of the invoice number, a route number or a tech name.</div>';
   else h+='<div class="misslist">'+r.slice(0,40).map(function(v){
-    return '<button type="button" class="srow" data-sr="'+esc(v.invoice)+'"><span class="mono">'+(isStock(v)?'From stock':esc(v.invoice))+'</span>'+(isPro(v)?'<span class="pill neutral">Proline</span>':'<span class="pill neutral">SCP</span>')+phBadge(v)+'<span>'+esc(dlabel(v.date))+' '+esc(String(v.date||'').slice(0,4))+'</span><span>'+esc(rlabel(v.route))+techOf(v.route)+'</span><span class="mono">'+(isStock(v)?'':money(v.total))+'</span></button>';
+    return '<button type="button" class="srow" data-sr="'+esc(v.invoice)+'"><span class="mono">'+(isStock(v)?'From stock':esc(v.invoice))+'</span>'+(isPro(v)?'<span class="pill neutral">Proline</span>':'<span class="pill neutral">SCP</span>')+phBadge(v)+'<span>'+esc(dlabel(v.date))+' '+esc(String(v.date||'').slice(0,4))+'</span><span>'+esc(rlabel(v.route))+techOf(v.route)+'</span>'+(ordNote(v)?'<span class="muted">'+esc(ordNote(v))+'</span>':'')+'<span class="mono">'+(isStock(v)?'':money(v.total))+'</span></button>';
   }).join('')+'</div>';
   el.innerHTML=h;el.hidden=false;
 }
@@ -1108,8 +1734,6 @@ document.addEventListener('keydown',function(e){
   }
 });
 document.addEventListener('click',function(e){
-  var mo=e.target.closest('[data-missok]');
-  if(mo){missDismissed[mo.getAttribute('data-missok')]=1;renderMissing();return}
   var s=e.target.closest('[data-sr]');
   if(s){var k=s.getAttribute('data-sr');if(k==='close'){document.getElementById('srchIn').value='';drawSearch()}else openFound(k);return}
   var vb=e.target.closest('[data-view]');
@@ -1155,18 +1779,89 @@ document.addEventListener('keydown',function(e){
   if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('fig')&&e.target.hasAttribute('data-ft')){e.preventDefault();openOv(e.target)}
 });
 
+/* phone orders (phone.js): the page hands it what it needs */
+function phBadge(v){return v&&v.source==='phone'?' <span class="pill ph-badge">Phone order, no invoice yet (est.)</span>':''}
+function phNote(n){return n?' · incl. '+n+' phone order'+(n===1?'':'s')+', est.':''}
+window.__tally={get invoices(){return invoices},get cfg(){return cfg},get dbRef(){return dbRef},get sampleFn(){return sampleFn},get found(){return found},
+  esc:esc,money:money,r2:r2,mmdd:mmdd,dlabel:dlabel,rlabel:rlabel,todayISO:todayISO,routeFrom:routeFrom,techName:techName,
+  priceLines:priceLines,typicalPrice:typicalPrice,prodKey:prodKey,bottlesOf:bottlesOf,qOf:qOf,itemText:itemText,
+  renderPreview:renderPreview,openPaste:openPaste,phone:null};
+
 render();
+
+/* ---------- storage: Supabase through the signed-in staff session (tally/store.js) ---------- */
+var store=window.TallyStore,techRows=[];
+function docKey(v){return store.mirrorNo(v)}
+function putLocal(d){
+  var k=docKey(d),i=-1;invoices.forEach(function(x,n){if(docKey(x)===k)i=n});
+  if(i<0)invoices.push(d);else invoices[i]=d;
+  render();
+}
+function removeLocal(id){invoices=invoices.filter(function(x){return docKey(x)!==id&&x.invoice!==id});render()}
+function saveSchedules(list){
+  var weeks={};list.forEach(function(s){weeks[s.week]=s});
+  return store.saveSetting('schedules',{weeks:weeks}).then(function(){schedules=list;render()});
+}
+dbRef={doc:function(path){
+  var p=path.split('/'),col=p[0],id=p.slice(1).join('/');
+  return {
+    set:function(d){
+      if(col==='invoices')return store.saveInvoice(d,techRows).then(function(){putLocal(d)});
+      if(col==='schedules')return saveSchedules(schedules.filter(function(s){return s.week!==d.week}).concat([d]));
+      return Promise.reject(new Error('That is only available in the Claude version.'));
+    },
+    delete:function(){
+      if(col==='invoices'){var v=invoices.filter(function(x){return docKey(x)===id||x.invoice===id})[0];return store.deleteInvoice(v?docKey(v):id,v&&v.vendor).then(function(){removeLocal(id)})}
+      if(col==='schedules')return saveSchedules(schedules.filter(function(s){return s.week!==id}));
+      return Promise.reject(new Error('That is only available in the Claude version.'));
+    }};
+}};
+cfgRef={set:function(d){return store.saveSetting('config',d)}};
+missRef={set:function(d){return store.saveSetting('missing',d)}};
+alertRef={set:function(d){return store.saveSetting('alerts',d)}};
+stopsRef={set:function(d){return store.saveSetting('stops',d)}};
+
+function applySettings(S){
+  var c=S.config;
+  if(c)cfg={bottlePrice:Number(c.bottlePrice)>0?Number(c.bottlePrice):4.36,perBox:Number(c.perBox)>0?Number(c.perBox):4,techs:c.techs||{},aliases:c.aliases||{}};
+  missDismissed=(S.missing&&S.missing.dismissed)||{};
+  alertAck=(S.alerts&&S.alerts.ack)||{};
+  var s=S.stops;
+  if(s)an={stops:s.stops||{},wpm:Number(s.wpm)>0?Number(s.wpm):4.3,bench:Number(s.bench)>0?Number(s.bench):null,month:s.month||null,basis:s.basis||'pe'};
+  var w=(S.schedules&&S.schedules.weeks)||{};
+  schedules=Object.keys(w).sort().map(function(k){return w[k]});
+  skipped=(S.skipped&&S.skipped.items)||[];
+}
+var reloading=false;
+async function reloadAll(){
+  if(reloading)return;reloading=true;
+  try{
+    var r=await Promise.all([store.loadInvoices(),store.loadBrain(),store.loadSettings()]);
+    invoices=r[0];BR.techs=r[1].techs;techRows=r[1].techRows;BR.weeks=r[1].weeks;BR.cur=r[1].cur;applySettings(r[2]);
+    loaded.inv=true;SB.st='live';SB.err='';
+  }catch(e){
+    SB.err=(e&&e.message)||String(e);
+    if(!loaded.inv){
+      loaded.inv=true;SB.st='off';
+      document.getElementById('panel').innerHTML='<div class="alert"><div><b>The tally could not be loaded</b><p>'+esc(SB.err)+'</p><p>Check your connection and press Reload. If this keeps happening, ask Daniel.</p></div></div>';
+      brainChip();reloading=false;return;
+    }
+    SB.st='off';
+  }
+  reloading=false;brainChip();render();
+}
+document.getElementById('reloadBtn').addEventListener('click',reloadAll);
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&loaded.inv)reloadAll()});
+setInterval(function(){var a=document.activeElement;if(document.hidden||(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)))return;reloadAll()},300000);
+
 (async function(){
   var me=await DrPool.requireLogin({office:true});
   if(!me)return;
   DrPool.topBar('tally');
-  try{await loadAll()}catch(e){
-    document.getElementById('panel').innerHTML='<div class="alert"><div><b>The tally could not be loaded</b><p>'+esc((e&&e.message)||'Check your connection and reload. If this keeps happening, ask Daniel.')+'</p></div></div>';
-    return;
-  }
-  render();
+  brainChip();
+  reloadAll();
 })();
 })();
 </script>
-
+<script src="phone.js"></script>
 </body></html>
