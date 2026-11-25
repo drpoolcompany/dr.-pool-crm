@@ -175,7 +175,19 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
 .ovl .fig figcaption{font-size:20px;font-family:var(--f-display);font-weight:600;margin-bottom:8px}
 .ovl .fig figcaption::after{content:none}
 .ovl .chart text{font-size:11.5px}
-@media (max-width:520px){h1{font-size:28px}.srch input{width:150px}.ovl{padding:2vh 2vw}.ovl .ovp{width:96vw;padding:12px}}
+.scanb{padding:3px 9px;font-size:12.5px;display:inline-flex;align-items:center;gap:5px}
+.scanbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.scantbl td small{display:block;color:var(--muted)}
+.prog{height:8px;background:var(--tint);border-radius:99px;overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:var(--accent)}
+.scanvw{position:fixed;inset:0;z-index:70;background:rgba(5,15,20,.94);display:flex;flex-direction:column;color:#fff}
+.scanvw .svbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:var(--surface);color:var(--ink);border-bottom:1px solid var(--line)}
+.scanvw .svt{flex:1 1 140px;font-weight:600;min-width:120px}
+.scanvw .svbody{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;text-align:center;padding:8px;touch-action:pan-x pan-y pinch-zoom}
+.scanvw .svbody img{display:block;width:100%;max-width:none;height:auto;margin:0 auto;background:#fff}
+.scanvw .svmsg{padding:30px;color:#cfe}
+.scanvw .btn:disabled{opacity:.4;cursor:default}
+.chip.on{background:var(--accent);color:var(--accent-ink)}
+@media (max-width:520px){h1{font-size:28px}.scanvw .svbar .btn{padding:7px 10px}.srch input{width:150px}.ovl{padding:2vh 2vw}.ovl .ovp{width:96vw;padding:12px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -191,6 +203,7 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
       <button class="btn bell" id="bellBtn" type="button" aria-expanded="false" aria-controls="notif" aria-label="Price alerts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="bellN" class="pill bad" hidden>0</span></button>
       <span class="pill neutral" id="brainChip" role="status" aria-live="polite">Brain: connecting…</span>
       <button class="btn primary" id="pasteBtn" type="button" aria-expanded="false" aria-controls="pasteBox">Stock and schedule</button>
+      <button class="btn" id="scanBtn" type="button" aria-expanded="false" aria-controls="scanBox" hidden>Attach scans</button>
       <button class="btn" id="reloadBtn" type="button" title="Read the latest from the shared database">Reload</button>
       <button class="btn" id="csv" type="button" hidden>Export CSV</button>
     </div>
@@ -200,6 +213,9 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
 
   <section class="detail" id="srchRes" aria-label="Invoice search results" aria-live="polite" hidden></section>
   <section class="detail" id="notif" aria-label="Price alerts" hidden></section>
+
+  <section class="detail" id="scanBox" aria-label="Attach scans" hidden></section>
+  <input type="file" id="scanOne" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf" multiple hidden>
 
   <section class="detail" id="pasteBox" aria-label="Add invoices" hidden>
     <div class="dhead">
@@ -273,6 +289,7 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="../shared/drpool.js"></script>
 <script src="store.js"></script>
+<script src="scans.js"></script>
 <script>
 (function(){
 var CATS=[
@@ -871,15 +888,22 @@ function saveAn(patch){
   });
 }
 
+var scanOnlyMissing=false;
+function SC(){return window.TallyScans}
 function invTab(list){
+  var cn=SC()&&SC().state.ok?SC().counter(list):null;
+  var bar=cn?'<div class="row scanbar"><button type="button" class="chip'+(scanOnlyMissing?' on':'')+'" data-act="scanmiss" aria-pressed="'+scanOnlyMissing+'">Missing scans: '+cn.missing+' of '+cn.total+'</button><span class="muted">'+(scanOnlyMissing?'Showing only invoices without a scan.':cn.have+' invoice'+(cn.have===1?'':'s')+' with a scan in this view.')+'</span></div>':'';
+  if(cn&&scanOnlyMissing)list=list.filter(function(v){return SC().realInvoice(v)&&!SC().hasScan(v)});
   var rows=list.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:rnum(a.route)-rnum(b.route)});
-  var h='<div class="scroll"><table><thead><tr><th>Date</th><th>Route</th><th class="l">Invoice</th><th class="l">Items</th><th>Total</th><th class="l">Check</th></tr></thead><tbody>';
+  var h=bar+'<div class="scroll"><table><thead><tr><th>Date</th><th>Route</th><th class="l">Invoice</th><th class="l">Items</th><th>Total</th><th class="l">Scan</th><th class="l">Check</th></tr></thead><tbody>';
+  if(!rows.length)h+='<tr><td colspan="7" class="empty">'+(scanOnlyMissing?'Every invoice in this view has a scan.':'No invoices.')+'</td></tr>';
   rows.forEach(function(v){
     var sum=(v.items||[]).reduce(function(s,i){return s+(Number(i.ext)||0)},0),off=Math.round((sum-Number(v.total))*100)/100;
     var items=(v.items||[]).map(function(i){var z=zeroLines({items:[i]}).length;return (z?'<b class="bad-t">':'')+esc(itemText(i))+(z?'</b>':'')}).join(', ');
     var stk=isStock(v);
     h+='<tr><td>'+esc(dlabel(v.date))+'</td><td class="m">'+esc(v.route)+'</td><td class="l">'+(stk?'<span class="muted">From stock</span>':'<span class="mono">'+invLink(v.invoice)+'</span>'+(isPro(v)?' <span class="pill neutral">Proline</span>':'')+phBadge(v)+(ordNote(v)?'<small>'+esc(ordNote(v))+'</small>':''))+'</td>'+
       '<td class="l" style="white-space:normal;min-width:260px">'+items+(stk&&v.note?'<small>'+esc(v.note)+'</small>':'')+'</td><td class="m">'+(stk?'':money(v.total))+'</td>'+
+      '<td class="l">'+(SC()?SC().rowBtn(v):'')+'</td>'+
       '<td class="l">'+(stk?'<button class="btn" type="button" data-stdel="'+esc(v.invoice)+'">Remove</button>':off===0?'<span class="pill ok">Lines add up</span>':'<span class="pill bad">Off by '+money(off)+'</span>')+'</td></tr>';
   });
   return h+'</tbody></table></div><div class="note">Click an invoice number to see everything on it.</div>';
@@ -1081,6 +1105,7 @@ function invDetail(id){
   h+='</tbody><tfoot><tr><td>Invoice total</td><td></td><td></td><td></td><td class="m">'+money(v.total)+'</td></tr></tfoot></table></div>';
   var fu=[];invoices.forEach(function(o){if(o.invoice===v.invoice)return;(o.items||[]).forEach(function(z){if(zeroLines({items:[z]}).length){var b=deliveredBy(o,z);if(b&&b.invoice===v.invoice)fu.push(o.invoice)}})});
   if(fu.length)h+='<div class="note">This invoice delivers the backordered item from '+Array.from(new Set(fu)).map(function(x){return invLink(x)}).join(', ')+'. The gallons are counted here, not on the $0 line.</div>';
+  h+=(SC()?SC().detailBar(v):'');
   h+='<div>'+(off===0?'<span class="pill ok">Lines add up to the printed total</span>':'<span class="pill bad">Lines are off by '+money(off)+'</span>')+'</div></div>';
   return h;
 }
@@ -1130,6 +1155,7 @@ document.addEventListener('click',function(e){
     if(a==='anbasis'){saveAn({basis:b.getAttribute('data-k')});render();return}
     if(a==='anchem'){anChem=b.getAttribute('data-k');render();return}
     if(a==='vend'){vendSel=b.getAttribute('data-k')||'all';dateSel='all';detail=null;render();return}
+    if(a==='scanmiss'){scanOnlyMissing=!scanOnlyMissing;render();return}
     if(a==='inv'){detail={kind:'inv',id:b.getAttribute('data-inv')};renderDetail(true);return}
   }
   var t=e.target.closest('.tab');
@@ -1803,6 +1829,7 @@ render();
 
 /* ---------- storage: Supabase through the signed-in staff session (tally/store.js) ---------- */
 var store=window.TallyStore,techRows=[];
+SC().init({getInvoices:function(){return invoices},render:function(){render();SC().drawBox()},mirrorNo:function(v){return store.mirrorNo(v)},isOffice:function(){return !!(DrPool.me&&DrPool.me.office)}});
 function docKey(v){return store.mirrorNo(v)}
 function putLocal(d){
   var k=docKey(d),i=-1;invoices.forEach(function(x,n){if(docKey(x)===k)i=n});
@@ -1848,7 +1875,7 @@ var reloading=false;
 async function reloadAll(){
   if(reloading)return;reloading=true;
   try{
-    var r=await Promise.all([store.loadInvoices(),store.loadBrain(),store.loadSettings()]);
+    var r=await Promise.all([store.loadInvoices(),store.loadBrain(),store.loadSettings(),SC().load()]);
     invoices=r[0];BR.techs=r[1].techs;techRows=r[1].techRows;BR.weeks=r[1].weeks;BR.cur=r[1].cur;applySettings(r[2]);
     loaded.inv=true;SB.st='live';SB.err='';
   }catch(e){
@@ -1860,7 +1887,7 @@ async function reloadAll(){
     }
     SB.st='off';
   }
-  reloading=false;brainChip();render();
+  reloading=false;brainChip();render();SC().drawBox();
 }
 document.getElementById('reloadBtn').addEventListener('click',reloadAll);
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&loaded.inv)reloadAll()});
@@ -1870,6 +1897,7 @@ setInterval(function(){var a=document.activeElement;if(document.hidden||(a&&/^(I
   var me=await DrPool.requireLogin({office:true});
   if(!me)return;
   DrPool.topBar('tally');
+  document.getElementById('scanBtn').hidden=!me.office;
   brainChip();
   reloadAll();
 })();

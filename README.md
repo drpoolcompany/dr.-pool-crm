@@ -14,7 +14,7 @@ Data lives in Supabase (the "brain") and is protected by row-level security. The
 ## Chemical Tally (`tally/`)
 
 This is the full Chemical Tally, the same app as the "SCP Chemical Tally" Claude artifact, running on the staff site.
-`tally/index.html` is the page, `tally/store.js` is the storage layer, `tally/phone.js` is the phone-order list.
+`tally/index.html` is the page, `tally/store.js` is the storage layer, `tally/phone.js` is the phone-order list, `tally/scans.js` is the invoice scans.
 
 What it shows: the route table (with the Geffet and Stock rows), by day, by product, muriatic acid, the invoice list, the
 vendor filter (SCP / Proline), invoice search (invoice, order and route numbers, tech names, order dates), price-change
@@ -54,3 +54,11 @@ staff page does not offer PDF import. Do not fake it with a new regex parser wit
 Weekly schedule: weeks the Brain has show "from the brain" and are used automatically. A schedule Excel loaded here is kept in
 `tally_settings` only ("saved here only"). It is not written to the Brain because `route_stops` is per stop with a customer link
 and its write policy is `can_dispatch()` (Daniel and David only, not `can_office()`). Load the same Excel on the Brain page.
+
+## Invoice scans (added 2026-11-25)
+Each invoice can have a scanned picture, stored in Supabase Storage, private bucket `invoice-scans` (5 MB limit; JPG, PNG, PDF).
+- Layout: `SCP/B7980083.jpg`, `Proline/4520395.jpg`; extra pages `SCP/B7980083_2.jpg`, `_3.jpg`. Name = invoice number exactly (case does not matter, `b7980083_2.jpg` also works).
+- Who: Office users only (`can_office()`, same as the invoice tables) can see, upload, replace and delete. No anonymous access. Policies on `storage.objects`: `invoice_scans_office_select/insert/update/delete`, all `bucket_id = 'invoice-scans' AND can_office()`.
+- Staff page (`tally/scans.js`, wired in `index.html`): Invoices tab has a Scan column (button opens the viewer through a 10-minute signed URL; Prev/Next for pages, zoom, Close) and a "Missing scans" filter. "Attach scans" in the top bar takes many files or one zip, shows a preview (new / already has a scan, replace? / no matching invoice), then uploads ticked rows with upsert. Images over 600 KB are compressed in the browser (JPEG, 1600 px, q0.75). Each invoice detail has Attach/Replace and Delete. The zip reader (JSZip) loads from jsdelivr only when a zip is chosen.
+- No database column: the page lists the bucket folders (`SCP`, `Proline`) on each reload.
+- The Claude artifact cannot reach Supabase Storage (its content policy blocks other hosts), so scans are viewed and managed on the staff page only. Do not add scan code to the artifact mirror.

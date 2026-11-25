@@ -8,6 +8,15 @@ The repo page is now the real tally, not a read-only copy: `tally/index.html` + 
 - Weekly schedule: default is automatic from the Brain (`v_route_summary`, shown "from the brain"). An Excel loaded here is saved only to `tally_settings.schedules` and the UI says "saved here only". Writing it to the Brain was not done: `route_stops` rows are per stop (day, slot, customer_id, label, price, area, service_code, flag, Sunday `week_of`) written by Claude-driven imports with customer matching, and the write policy is `can_dispatch()` (daniel/david), not `can_office()`. Widening that policy would break the Brain rule that only Daniel and David edit the schedule, so no migration was applied.
 
 
+## Invoice scans (added 2026-11-25)
+Each invoice can have a scanned picture, stored in Supabase Storage, private bucket `invoice-scans` (5 MB limit; JPG, PNG, PDF).
+- Layout: `SCP/B7980083.jpg`, `Proline/4520395.jpg`; extra pages `SCP/B7980083_2.jpg`, `_3.jpg`. Name = invoice number exactly (case does not matter, `b7980083_2.jpg` also works).
+- Who: Office users only (`can_office()`, same as the invoice tables) can see, upload, replace and delete. No anonymous access. Policies on `storage.objects`: `invoice_scans_office_select/insert/update/delete`, all `bucket_id = 'invoice-scans' AND can_office()`.
+- Staff page (`tally/scans.js`, wired in `index.html`): Invoices tab has a Scan column (button opens the viewer through a 10-minute signed URL; Prev/Next for pages, zoom, Close) and a "Missing scans" filter. "Attach scans" in the top bar takes many files or one zip, shows a preview (new / already has a scan, replace? / no matching invoice), then uploads ticked rows with upsert. Images over 600 KB are compressed in the browser (JPEG, 1600 px, q0.75). Each invoice detail has Attach/Replace and Delete. The zip reader (JSZip) loads from jsdelivr only when a zip is chosen.
+- No database column: the page lists the bucket folders (`SCP`, `Proline`) on each reload.
+- The Claude artifact cannot reach Supabase Storage (its content policy blocks other hosts), so scans are viewed and managed on the staff page only. Do not add scan code to the artifact mirror.
+
+
 You are the product manager for ONE app: **the Dr. Pool Chemical Tally (SCP and Proline invoices by route; read-only copy)**. Daniel (daniel@drpool.us, owner of Dr. Pool) opened this chat from this artifact to improve that app. Stay on this app only. Other Dr. Pool apps have their own chats; do not change them, and do not assume anything from them.
 
 ## Your job
