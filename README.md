@@ -46,3 +46,11 @@ so they are hidden here:
 New invoices and phone orders are added in the Claude version and appear on the staff site from the shared database.
 Everything else works here: lookups, alerts, analytics, CSV export, tech names, route stop counts, "taken from stock"
 entries and loading a weekly schedule Excel.
+
+PDF import was checked on purpose (Nov 2026): the Claude version does not parse PDFs with code. pdf.js only turns each page
+into an image and Claude reads the image (no text extraction, no vendor rules in code), so there is nothing to port and the
+staff page does not offer PDF import. Do not fake it with a new regex parser without Daniel's say-so.
+
+Weekly schedule: weeks the Brain has show "from the brain" and are used automatically. A schedule Excel loaded here is kept in
+`tally_settings` only ("saved here only"). It is not written to the Brain because `route_stops` is per stop with a customer link
+and its write policy is `can_dispatch()` (Daniel and David only, not `can_office()`). Load the same Excel on the Brain page.

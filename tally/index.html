@@ -205,7 +205,7 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
     <div class="dhead">
       <div>
         <h2>Stock and schedule</h2>
-        <p>Reading invoice PDFs, screenshots and phone orders needs Claude. Use the Claude version of this page (SCP Chemical Tally) for those. Here you can record something taken from stock and load a weekly schedule.</p>
+        <p>Reading invoice PDFs, scanned pages, screenshots and phone orders needs Claude (the PDFs are read by Claude, not by code, so this page cannot do it). Use the Claude version of this page (SCP Chemical Tally) for those. Here you can record something taken from stock and load a weekly schedule.</p>
       </div>
       <button class="btn" id="pasteClose" type="button">Close</button>
     </div>
@@ -226,7 +226,7 @@ input[type=date]{font:inherit;color:var(--ink);background:var(--surface);border:
     </div>
     <div class="stockbox" id="schedBox">
       <h3>Weekly schedule</h3>
-      <p class="muted">Weekly schedules now come from the Dr. Pool brain on their own. Add an Excel (the one with the Cont routes sheet) only for a week the brain does not have. The Analytics tab uses it from November 2026 on: pools per route and the income they bring in, to work out pool equivalents.</p>
+      <p class="muted"><b>Automatic by default:</b> weekly schedules come from the Dr. Pool Brain on their own (those weeks show "from the brain" below). Choose a schedule Excel here (the one with the Cont routes sheet) only for a week the Brain does not have. It is saved in the tally for the Analytics tab. It is <b>not</b> written to the Brain from this page: the Brain keeps every stop with its customer, and only Daniel and David can change it, so send that Excel to the Brain page to load the same week there. The Analytics tab uses it from November 2026 on: pools per route and the income they bring in, to work out pool equivalents.</p>
       <div class="row"><label class="btn" for="scFile" id="scFileLbl" tabindex="0">Choose schedule Excel</label><input type="file" id="scFile" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden><span id="scStatus" class="muted" role="status"></span></div>
       <div id="scPreview" class="pv"></div>
       <div id="scList"></div>
@@ -740,7 +740,7 @@ document.addEventListener('click',function(e){
     if(!dbRef){st.textContent='The saved tally is not available in this view.';return}
     var d={week:schedDraft.week,file:schedDraft.file,routes:schedDraft.routes,at:Date.now()};
     st.textContent='Saving...';
-    dbRef.doc('schedules/'+d.week).set(d).then(function(){st.textContent='Saved the week of '+weekLabel(d.week)+'.';schedDraft=null;renderSchedBox()}).catch(function(){st.textContent='That could not be saved. Ask the owner for edit access.'});
+    dbRef.doc('schedules/'+d.week).set(d).then(function(){st.textContent='Saved here only (tally copy) for the week of '+weekLabel(d.week)+'. Not written to the Brain: it stores each stop with its customer and only Daniel and David can change it.';schedDraft=null;renderSchedBox()}).catch(function(){st.textContent='That could not be saved. Ask the owner for edit access.'});
     return;
   }
   var del=e.target.closest('[data-scdel]');
