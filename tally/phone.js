@@ -607,6 +607,7 @@ function showButtons(){
   build();
   var on=!!T.sampleFn;
   ['phOpen','phHdr'].forEach(function(id){var el=$(id);if(el)el.hidden=!on});
+  if(!on&&$('phChat')){$('phChat').hidden=true;st.open=false}
 }
 window.__tallyPhone={parseDate:parseDate,analyze:analyze,resolveRoute:resolveRoute,matchFor:matchFor,findDup:findDup};
 T.phone={matchFor:matchFor,onPreview:onPreview,afterAdd:afterAdd,onRender:schedule,onSample:showButtons};
